@@ -20,9 +20,15 @@ services:
       retries: 15
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        # local stack has no Supabase auth server -> dev identity bypass.
+        # NEVER set these on a real deployment (code refuses on Vercel).
+        NEXT_PUBLIC_DEV_AUTH: "1"
     restart: unless-stopped
     environment:
+      DEV_AUTH: "1"
       DATABASE_URL: postgres://${POSTGRES_USER:-aimath}:${POSTGRES_PASSWORD:-aimath_dev}@db:5432/${POSTGRES_DB:-aimath}
     ports:
       - "${APP_PORT:-3000}:3000"

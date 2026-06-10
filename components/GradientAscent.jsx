@@ -143,10 +143,14 @@ function AuthGate() {
   );
 }
 
+const DEV_MODE = process.env.NEXT_PUBLIC_DEV_AUTH === '1';
+const DEV_SESSION = { user: { id: '00000000-0000-4000-8000-000000001337', email: 'dev@astrealabs.com' } };
+
 export default function GradientAscent() {
   const [session, setSession] = useState(undefined); // undefined = loading
 
   useEffect(() => {
+    if (DEV_MODE) { setSession(DEV_SESSION); return; } // compose dev: no auth server
     const supabase = getSupabase();
     if (!supabase) { setSession(null); return; }
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
@@ -165,7 +169,7 @@ export default function GradientAscent() {
       mount({ // idempotent — safe under StrictMode double-invoke
         userLabel: (session.user.email || 'learner').split('@')[0],
         storageKey: 'gradient-ascent-v1:' + session.user.id,
-        onSignOut: async () => {
+        onSignOut: DEV_MODE ? null : async () => {
           await getSupabase()?.auth.signOut();
           location.reload();
         },
