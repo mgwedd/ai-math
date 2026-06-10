@@ -69,7 +69,7 @@ lib/
   db.js                   pg pool + shared helpers
   engine.js               game engine: HUD, router, missions, quiz, canvas labs, sync
   curriculum/registry.js  LESSONS / INTERACTIVES / WRONG_WHY registries
-  curriculum/index.js     all 16 lessons + labs + wrong-answer feedback
+  curriculum/index.js     all lessons + labs + wrong-answer feedback (see also extra.js)
 ```
 
 ## Data model

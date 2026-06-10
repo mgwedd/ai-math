@@ -50,6 +50,7 @@ header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px
 .tag{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:99px;background:rgba(124,92,255,.16);color:#b9a8ff}
 .tag.done{background:rgba(45,212,160,.16);color:var(--good)}
 .tag.xp{background:rgba(255,201,77,.13);color:var(--gold)}
+.tag.weak{background:rgba(255,92,122,.15);color:#ff9db1}
 .lcard.locked{opacity:.45;cursor:not-allowed;filter:saturate(.4)}
 .lcard.locked:hover{transform:none;border-color:rgba(255,255,255,.07);box-shadow:none}
 .lcard.done-card{border-color:rgba(45,212,160,.35)}
@@ -174,6 +175,26 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
   padding:12px 14px;font-size:15px;color:var(--ink);font-family:var(--font);outline:none;margin-bottom:16px}
 .modal input:focus{border-color:var(--accent)}
 .modal .btn{width:100%}
+
+/* ===== go deeper + assessment ===== */
+details.deep{background:var(--bg2);border:1px solid rgba(124,92,255,.25);border-radius:12px;
+  margin-top:12px;overflow:hidden}
+details.deep summary{cursor:pointer;padding:13px 16px;font-size:13.5px;font-weight:800;color:#b9a8ff;
+  list-style:none;user-select:none}
+details.deep summary::before{content:'▸ ';color:var(--accent2)}
+details.deep[open] summary::before{content:'▾ '}
+details.deep summary::-webkit-details-marker{display:none}
+details.deep .deep-body{padding:2px 16px 14px;font-size:13.5px;line-height:1.7;color:#cdd4f0;
+  border-top:1px solid rgba(255,255,255,.06)}
+.assess{background:var(--bg2);border:1px solid rgba(255,201,77,.3);border-radius:13px;
+  padding:16px 18px;margin-top:8px;text-align:left}
+.assess.clean{border-color:rgba(45,212,160,.35)}
+.assess h3{font-size:13px;letter-spacing:.6px;color:var(--gold);margin-bottom:10px;font-weight:800}
+.assess.clean h3{color:var(--good)}
+.focus-item{padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13.5px;line-height:1.55}
+.focus-item b{color:#ff9db1;display:block;margin-bottom:2px}
+.focus-item:last-of-type{border-bottom:none}
+.focus-tip{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.6}
 
 /* ===== auth gate ===== */
 /* entrance animations must run exactly once; interacting with fields must
