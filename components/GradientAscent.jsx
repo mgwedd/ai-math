@@ -6,18 +6,54 @@
 import { useEffect, useState } from 'react';
 import { getSupabase } from '@/lib/supabase-browser';
 
+const MIN_PASSWORD_LEN = 12;
+
+/* Rough entropy estimate: length × log2(size of character classes in use).
+   Length dominates — per NIST 800-63B we use no composition rules, just a
+   floor and honest feedback. */
+function passwordEntropy(pw) {
+  if (!pw) return 0;
+  let pool = 0;
+  if (/[a-z]/.test(pw)) pool += 26;
+  if (/[A-Z]/.test(pw)) pool += 26;
+  if (/[0-9]/.test(pw)) pool += 10;
+  if (/[^a-zA-Z0-9]/.test(pw)) pool += 33;
+  return Math.round(pw.length * Math.log2(pool || 1));
+}
+function strength(bits) {
+  if (bits >= 80) return { label: 'strong', color: 'var(--good)', pct: 100 };
+  if (bits >= 60) return { label: 'decent', color: 'var(--gold)', pct: 70 };
+  if (bits > 0)   return { label: 'weak',   color: 'var(--bad)',  pct: Math.max(12, bits) };
+  return { label: '', color: 'transparent', pct: 0 };
+}
+
 function AuthGate() {
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [settled, setSettled] = useState(false);
+
+  // let the entrance animation play once, then remove it entirely so
+  // nothing (focus, autofill, re-renders) can ever replay it
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(true), 450);
+    return () => clearTimeout(t);
+  }, []);
+
+  const bits = passwordEntropy(password);
+  const s = strength(bits);
 
   async function submit(e) {
     e.preventDefault();
     const supabase = getSupabase();
     if (!supabase) {
       setMsg({ kind: 'error', text: 'Auth is not configured — missing NEXT_PUBLIC_SUPABASE_URL / key.' });
+      return;
+    }
+    if (mode === 'signup' && password.length < MIN_PASSWORD_LEN) {
+      setMsg({ kind: 'error', text: `Password must be at least ${MIN_PASSWORD_LEN} characters — a few random words work well.` });
       return;
     }
     setBusy(true); setMsg(null);
@@ -41,7 +77,7 @@ function AuthGate() {
   }
 
   return (
-    <div className="modal-back" style={{ position: 'fixed' }}>
+    <div className={'modal-back auth-back' + (settled ? ' settled' : '')}>
       <form className="modal" onSubmit={submit}>
         <h2>📈 Gradient Ascent</h2>
         <p>
@@ -55,10 +91,22 @@ function AuthGate() {
           autoComplete="email"
         />
         <input
-          type="password" required minLength={6} placeholder="password (min 6 chars)"
+          type="password" required
+          minLength={mode === 'signup' ? MIN_PASSWORD_LEN : undefined}
+          placeholder={mode === 'signup' ? `password (min ${MIN_PASSWORD_LEN} chars)` : 'password'}
           value={password} onChange={(e) => setPassword(e.target.value)}
           autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
         />
+        {mode === 'signup' && (
+          <>
+            <div className="pw-meter"><i style={{ width: s.pct + '%', background: s.color }} /></div>
+            <p className="pw-hint">
+              {password
+                ? `~${bits} bits of entropy — ${s.label}.`
+                : 'Length beats complexity: 4–5 random words make a strong, memorable password.'}
+            </p>
+          </>
+        )}
         {msg && (
           <p style={{
             color: msg.kind === 'error' ? 'var(--bad)' : 'var(--good)',
