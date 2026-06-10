@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aimath}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aimath_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-aimath}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # host port 5433 to avoid clashing with a local postgres on 5432
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aimath} -d ${POSTGRES_DB:-aimath}"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  app:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-aimath}:${POSTGRES_PASSWORD:-aimath_dev}@db:5432/${POSTGRES_DB:-aimath}
+      PORT: "3000"
+    volumes:
+      # live-mount the frontend so editing public/index.html needs no rebuild
+      - ./public:/app/public:ro
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
