@@ -55,7 +55,8 @@ CREATE TABLE lesson_completions (
 );
 
 -- Convenience view: per-lesson quiz accuracy per user.
-CREATE VIEW lesson_accuracy AS
+-- security_invoker: don't let the view bypass RLS (Postgres 15+).
+CREATE VIEW lesson_accuracy WITH (security_invoker = true) AS
 SELECT u.username,
        qa.lesson_id,
        count(*) FILTER (WHERE qa.correct)::float / count(*) AS accuracy,
@@ -63,3 +64,17 @@ SELECT u.username,
 FROM quiz_answers qa
 JOIN users u ON u.id = qa.user_id
 GROUP BY u.username, qa.lesson_id;
+
+-- ----------------------------------------------------------------
+-- Row Level Security.
+-- The app talks to Postgres server-side as the table owner (which
+-- bypasses RLS), so enabling RLS with NO policies changes nothing
+-- for the app — but on Supabase it locks these tables away from the
+-- anon/authenticated Data API roles. Locally it's inert. If we add
+-- Supabase Auth later, per-user policies go here.
+-- ----------------------------------------------------------------
+ALTER TABLE users              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE progress           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE xp_events          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quiz_answers       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lesson_completions ENABLE ROW LEVEL SECURITY;
