@@ -52,9 +52,22 @@ function AuthGate() {
       setMsg({ kind: 'error', text: 'Auth is not configured — missing NEXT_PUBLIC_SUPABASE_URL / key.' });
       return;
     }
-    if (mode === 'signup' && password.length < MIN_PASSWORD_LEN) {
-      setMsg({ kind: 'error', text: `Password must be at least ${MIN_PASSWORD_LEN} characters — a few random words work well.` });
-      return;
+    if (mode === 'signup') {
+      // mirrors the server policy (Supabase Auth settings): 12+ chars with
+      // lower, upper, digit and symbol — fail fast with a clear message
+      const missing = [
+        [/[a-z]/, 'a lowercase letter'],
+        [/[A-Z]/, 'an uppercase letter'],
+        [/[0-9]/, 'a digit'],
+        [/[^a-zA-Z0-9]/, 'a symbol'],
+      ].filter(([re]) => !re.test(password)).map(([, what]) => what);
+      if (password.length < MIN_PASSWORD_LEN || missing.length) {
+        const parts = [];
+        if (password.length < MIN_PASSWORD_LEN) parts.push(`at least ${MIN_PASSWORD_LEN} characters`);
+        if (missing.length) parts.push('include ' + missing.join(', '));
+        setMsg({ kind: 'error', text: 'Password needs ' + parts.join(' and ') + '.' });
+        return;
+      }
     }
     setBusy(true); setMsg(null);
     try {
@@ -103,7 +116,7 @@ function AuthGate() {
             <p className="pw-hint">
               {password
                 ? `~${bits} bits of entropy — ${s.label}.`
-                : 'Length beats complexity: 4–5 random words make a strong, memorable password.'}
+                : `${MIN_PASSWORD_LEN}+ characters with upper, lower, digit and symbol — e.g. a passphrase with a number and punctuation.`}
             </p>
           </>
         )}
