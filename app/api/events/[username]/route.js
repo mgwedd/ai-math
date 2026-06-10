@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { pool, cleanUsername, getOrCreateUser } from '@/lib/db';
+import { pool, cleanUsername, getOrCreateUser, readJson } from '@/lib/db';
 
 export async function POST(req, { params }) {
   const { username: raw } = await params;
   const username = cleanUsername(raw);
   if (!username) return NextResponse.json({ error: 'bad username' }, { status: 400 });
 
-  let body;
-  try { body = await req.json(); } catch { body = null; }
+  const { body, tooLarge } = await readJson(req);
+  if (tooLarge) return NextResponse.json({ error: 'payload too large' }, { status: 413 });
   const events = body && body.events;
   if (!Array.isArray(events) || events.length > 200) {
     return NextResponse.json({ error: 'body must be {events:[...]} (≤200)' }, { status: 400 });

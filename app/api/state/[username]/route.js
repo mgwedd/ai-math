@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pool, cleanUsername, getOrCreateUser } from '@/lib/db';
+import { pool, cleanUsername, getOrCreateUser, readJson } from '@/lib/db';
 
 export async function GET(_req, { params }) {
   const { username: raw } = await params;
@@ -20,13 +20,14 @@ export async function PUT(req, { params }) {
   const username = cleanUsername(raw);
   if (!username) return NextResponse.json({ error: 'bad username' }, { status: 400 });
 
-  let body;
-  try { body = await req.json(); } catch { body = null; }
+  const { body, tooLarge } = await readJson(req);
+  if (tooLarge) return NextResponse.json({ error: 'payload too large' }, { status: 413 });
   const state = body && body.state;
   if (!state || typeof state !== 'object' || Array.isArray(state)) {
     return NextResponse.json({ error: 'body must be {state:{...}}' }, { status: 400 });
   }
-  const xp = Number.isFinite(+state.xp) ? Math.max(0, Math.floor(+state.xp)) : 0;
+  const xp = Number.isFinite(+state.xp)
+    ? Math.min(10_000_000, Math.max(0, Math.floor(+state.xp))) : 0;
 
   const client = await pool.connect();
   try {
