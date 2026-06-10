@@ -19,14 +19,10 @@ services:
       retries: 15
 
   app:
-    build: ./server
+    build: .
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-aimath}:${POSTGRES_PASSWORD:-aimath_dev}@db:5432/${POSTGRES_DB:-aimath}
-      PORT: "3000"
-    volumes:
-      # live-mount the frontend so editing public/index.html needs no rebuild
-      - ./public:/app/public:ro
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
