@@ -1,11 +1,8 @@
--- v2: Supabase Auth. All data keyed to auth.users (uuid); the handrolled
--- username system is gone. Profiles are auto-provisioned on signup by
--- trigger. RLS gives each user access to only their own rows.
--- NOTE: drops the v1 username-keyed tables (pre-launch, data re-syncs from
--- clients' localStorage after login).
-
-DROP VIEW IF EXISTS lesson_accuracy;
-DROP TABLE IF EXISTS lesson_completions, quiz_answers, xp_events, progress, users;
+-- Baseline schema (squashed 2026-06-10, pre-launch: replaces the
+-- username-era migrations). All data keys to auth.users (uuid); profiles
+-- are auto-provisioned on signup; RLS restricts every table to its owner.
+-- From here on, history is append-only — never edit or squash applied
+-- migrations once any environment you can't rewrite depends on them.
 
 CREATE TABLE profiles (
   user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -129,3 +126,7 @@ CREATE POLICY "read own lesson_completions" ON lesson_completions
   FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id);
 CREATE POLICY "insert own lesson_completions" ON lesson_completions
   FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
+
+-- Only the auth.users trigger may run the provisioning function
+-- (it is SECURITY DEFINER; Data API /rpc must not expose it).
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
