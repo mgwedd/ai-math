@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { pool, cleanUsername, getOrCreateUser, readJson } from '@/lib/db';
+import { pool, readJson } from '@/lib/db';
+import { getAuthUser } from '@/lib/auth-server';
 
-export async function POST(req, { params }) {
-  const { username: raw } = await params;
-  const username = cleanUsername(raw);
-  if (!username) return NextResponse.json({ error: 'bad username' }, { status: 400 });
+export async function POST(req) {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const { body, tooLarge } = await readJson(req);
   if (tooLarge) return NextResponse.json({ error: 'payload too large' }, { status: 413 });
@@ -16,7 +16,6 @@ export async function POST(req, { params }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const userId = await getOrCreateUser(client, username);
     let stored = 0;
     for (const ev of events) {
       if (!ev || typeof ev.lessonId !== 'string' || ev.lessonId.length > 64) continue;
@@ -24,14 +23,14 @@ export async function POST(req, { params }) {
         await client.query(
           `INSERT INTO quiz_answers (user_id, lesson_id, question_idx, correct, first_try)
            VALUES ($1, $2, $3, $4, $5)`,
-          [userId, ev.lessonId, Math.floor(+ev.questionIdx) || 0, !!ev.correct, !!ev.firstTry]
+          [user.id, ev.lessonId, Math.floor(+ev.questionIdx) || 0, !!ev.correct, !!ev.firstTry]
         );
         stored++;
       } else if (ev.type === 'lesson_complete') {
         await client.query(
           `INSERT INTO lesson_completions (user_id, lesson_id)
            VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [userId, ev.lessonId]
+          [user.id, ev.lessonId]
         );
         stored++;
       }

@@ -6,9 +6,9 @@ export async function GET() {
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const r = await pool.query(
-    `SELECT pr.username, p.xp, p.updated_at
-     FROM progress p JOIN profiles pr ON pr.user_id = p.user_id
-     ORDER BY p.xp DESC LIMIT 20`
+    `SELECT lesson_id, accuracy, attempts FROM lesson_accuracy
+     WHERE user_id = $1 ORDER BY accuracy ASC`,
+    [user.id]
   );
-  return NextResponse.json({ leaderboard: r.rows });
+  return NextResponse.json({ lessons: r.rows });
 }

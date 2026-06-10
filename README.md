@@ -30,10 +30,29 @@ npm install
 npm run dev          # DATABASE_URL defaults to localhost:5433
 ```
 
-First load asks for a username (no password — local learning tool). Progress
-syncs to Postgres with a ~1s debounce; the HUD pill shows 💾 local / 🟡 saving /
-🟢 synced / ⚪ offline. When offline, progress lives in localStorage and
-union-merges back into the DB when the server returns — nothing is lost.
+## Auth
+
+Access requires a **Supabase Auth** account (email + password). The React
+shell gates the app behind a session; API routes validate the session cookie
+via `@supabase/ssr` and key all data by the authenticated user's uuid — the
+client never sends an identifier (no BOLA). A DB trigger auto-provisions a
+`profiles` row on signup, and RLS restricts every table to its owner.
+Sign out via the 👤 pill.
+
+Progress syncs to Postgres with a ~1s debounce; the HUD pill shows 💾 local /
+🟡 saving / 🟢 synced / ⚪ offline. When offline, progress lives in
+localStorage (scoped per user id) and union-merges into the DB when the
+server returns — nothing is lost.
+
+## Migrations (git-ops)
+
+`supabase/migrations/*.sql` is the source of truth, applied in filename
+order. Cloud: apply via Supabase MCP/CLI (`supabase db push`) — history is
+tracked in `supabase_migrations.schema_migrations`. Local compose: a fresh
+volume applies them automatically via `db/init/01-apply-migrations.sh`
+(after `00-local-auth-shim.sql`, which fakes the `auth` schema that plain
+Postgres lacks — note the compose stack has **no auth server**, so login
+only works against cloud Supabase).
 
 ## Layout
 
@@ -55,14 +74,17 @@ lib/
 
 ## Data model
 
+All tables key on `auth.users(id)` (uuid) with `ON DELETE CASCADE` and
+owner-only RLS policies.
+
 | table | purpose |
 |---|---|
-| `users` | username → id |
+| `profiles` | display username, auto-provisioned on signup by trigger |
 | `progress` | one JSONB state snapshot per user, xp denormalized |
 | `xp_events` | append-only xp history (for future charts) |
 | `quiz_answers` | every quiz click: lesson, question, correct?, first try? |
 | `lesson_completions` | first completion timestamp per lesson |
-| `lesson_accuracy` (view) | per-lesson accuracy per user |
+| `lesson_accuracy` (view) | per-lesson accuracy per user (security_invoker) |
 
 Poke at it:
 
@@ -74,13 +96,16 @@ aimath=# SELECT delta, xp_after, created_at FROM xp_events ORDER BY id DESC LIMI
 
 ## API
 
+All routes (except `/api/health`) require a Supabase session cookie and
+operate on the authenticated user only:
+
 ```
-GET  /api/health
-GET  /api/state/:username      progress snapshot (404 for new users)
-PUT  /api/state/:username      {state:{...}} upsert; logs xp delta
-POST /api/events/:username     {events:[{type:'quiz_answer'|'lesson_complete', ...}]}
-GET  /api/stats/:username      per-lesson quiz accuracy (worst first)
-GET  /api/leaderboard          top 20 by xp
+GET  /api/health         liveness + db check (public)
+GET  /api/state          progress snapshot (404 for new users)
+PUT  /api/state          {state:{...}} upsert; logs xp delta
+POST /api/events         {events:[{type:'quiz_answer'|'lesson_complete', ...}]}
+GET  /api/stats          per-lesson quiz accuracy (worst first)
+GET  /api/leaderboard    top 20 by xp (usernames from profiles)
 ```
 
 ## Extending the curriculum
@@ -95,8 +120,15 @@ from `lib/curriculum/index.js`.
 
 ## Config
 
-Defaults work out of the box. Override via `.env` (see `.env.example`):
-`APP_PORT` (3000), `POSTGRES_PORT` (5433 on the host), `POSTGRES_USER`,
-`POSTGRES_PASSWORD`, `POSTGRES_DB`. The app reads `DATABASE_URL`.
+Defaults work out of the box for compose. Override via `.env` (see
+`.env.example`): `APP_PORT` (3000), `POSTGRES_PORT` (5433 on the host),
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`.
+
+The app reads: `DATABASE_URL` (or `POSTGRES_URL` — the Vercel↔Supabase
+integration's name), optional `DATABASE_SSL_CA` (PEM, verified TLS) or
+`DATABASE_SSL=no-verify`, and for auth `NEXT_PUBLIC_SUPABASE_URL` +
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or `..._ANON_KEY`). For local
+`npm run dev`, put the Supabase URL + publishable key in `.env.local`
+(they're public values, from the dashboard's API settings).
 
 To wipe all progress: `docker compose down -v`.

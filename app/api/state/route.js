@@ -1,24 +1,21 @@
 import { NextResponse } from 'next/server';
-import { pool, cleanUsername, getOrCreateUser, readJson } from '@/lib/db';
+import { pool, readJson } from '@/lib/db';
+import { getAuthUser } from '@/lib/auth-server';
 
-export async function GET(_req, { params }) {
-  const { username: raw } = await params;
-  const username = cleanUsername(raw);
-  if (!username) return NextResponse.json({ error: 'bad username' }, { status: 400 });
+export async function GET() {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const r = await pool.query(
-    `SELECT p.state, p.xp, p.updated_at
-     FROM progress p JOIN users u ON u.id = p.user_id
-     WHERE u.username = $1`,
-    [username]
+    'SELECT state, xp, updated_at FROM progress WHERE user_id = $1',
+    [user.id]
   );
   if (!r.rows.length) return NextResponse.json({ error: 'no state' }, { status: 404 });
   return NextResponse.json(r.rows[0]);
 }
 
-export async function PUT(req, { params }) {
-  const { username: raw } = await params;
-  const username = cleanUsername(raw);
-  if (!username) return NextResponse.json({ error: 'bad username' }, { status: 400 });
+export async function PUT(req) {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const { body, tooLarge } = await readJson(req);
   if (tooLarge) return NextResponse.json({ error: 'payload too large' }, { status: 413 });
@@ -32,9 +29,8 @@ export async function PUT(req, { params }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const userId = await getOrCreateUser(client, username);
     const prev = await client.query(
-      'SELECT xp FROM progress WHERE user_id = $1 FOR UPDATE', [userId]);
+      'SELECT xp FROM progress WHERE user_id = $1 FOR UPDATE', [user.id]);
     const prevXp = prev.rows.length ? prev.rows[0].xp : 0;
     const r = await client.query(
       `INSERT INTO progress (user_id, state, xp, updated_at)
@@ -42,12 +38,12 @@ export async function PUT(req, { params }) {
        ON CONFLICT (user_id)
        DO UPDATE SET state = EXCLUDED.state, xp = EXCLUDED.xp, updated_at = now()
        RETURNING updated_at`,
-      [userId, state, xp]
+      [user.id, state, xp]
     );
     if (xp !== prevXp) {
       await client.query(
         'INSERT INTO xp_events (user_id, delta, xp_after) VALUES ($1, $2, $3)',
-        [userId, xp - prevXp, xp]
+        [user.id, xp - prevXp, xp]
       );
     }
     await client.query('COMMIT');
