@@ -10,10 +10,13 @@ MLE (drag a Gaussian over data, watch log-likelihood climb) · sampling &
 CLT (watch means converge) · entropy & KL divergence (distribution-vs-
 distribution lab). Rewires ml-gpt's "probability" language to be earned.
 
-## 2. World 1 depth: SVD + matrix calculus
-3 lessons: rank & the four subspaces · SVD (image-compression lab: slider
-over kept singular values) · matrix calculus (shapes of Jacobians; derive
-∂(Wx)/∂W visually). Unlocks reading real backprop derivations + LoRA.
+## 2. World 1 depth: SVD + matrix calculus ✅ SHIPPED
+`lib/curriculum/la-depth.js` — 3 lessons: rank & the four subspaces
+(collapse-the-plane lab with a draggable null-space probe) · SVD
+(image-compression lab: real Jacobi SVD in-browser, slider over kept
+singular values, mission thresholds verified numerically) · matrix
+calculus (Jacobian shape explorer + ∂L/∂W = δxᵀ outer-product heatmap).
+Unlocks reading real backprop derivations + LoRA.
 
 ## 3. World 2 depth: convexity + Taylor/Hessian
 2 lessons: convex vs non-convex (why convexity = global guarantees) ·

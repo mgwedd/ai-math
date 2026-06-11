@@ -151,7 +151,7 @@ engine.js):
 | world id | name | lessons in |
 |---|---|---|
 | `pre` | World 0 — Foundations | `extra.js` |
-| `la` | World 1 — Linear Algebra | `index.js` (core) |
+| `la` | World 1 — Linear Algebra | `index.js` (core) + `la-depth.js` (rank/SVD/matrix calculus) |
 | `calc` | World 2 — Calculus | `index.js` (core) |
 | `prob` | World 2.5 — Probability & Statistics | `prob.js` |
 | `ml` | World 3 — Machine Learning | `ml.js` |
@@ -223,6 +223,9 @@ ai-math/
 │       ├── extra.js                        # World 0 (pre) lessons, QMETA tags,
 │       │                                   # go-deeper cards for la/calc lessons,
 │       │                                   # extra lessons (la-inverse, c-exp)
+│       ├── la-depth.js                     # World 1 depth: rank & four subspaces,
+│       │                                   # SVD (image compression), matrix calculus
+│       │                                   # (slot between la-eigen and la-boss via order:)
 │       ├── prob.js                         # World 2.5 (prob): 6 lessons, RVs → entropy/KL
 │       └── ml.js                           # World 3 (ml): 6 lessons from learning to GPTs
 │
