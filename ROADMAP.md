@@ -3,8 +3,8 @@
 Each increment = one session of work, shippable on its own. Order matters —
 later items depend on earlier vocabulary.
 
-## 1. World 2.5 — Probability & Statistics (the disqualifying gap)
-6 lessons: random variables & expectation (dice-simulator lab) · common
+## 1. World 2.5 — Probability & Statistics (the disqualifying gap) ✅ SHIPPED
+`lib/curriculum/prob.js` — 6 lessons: random variables & expectation (dice-simulator lab) · common
 distributions (parameter sliders) · Bayes' theorem (medical-test lab) ·
 MLE (drag a Gaussian over data, watch log-likelihood climb) · sampling &
 CLT (watch means converge) · entropy & KL divergence (distribution-vs-
