@@ -168,6 +168,7 @@ export default function GradientAscent() {
       if (cancelled) return;
       mount({ // idempotent — safe under StrictMode double-invoke
         userLabel: (session.user.email || 'learner').split('@')[0],
+        userEmail: session.user.email,
         storageKey: 'gradient-ascent-v1:' + session.user.id,
         onSignOut: DEV_MODE ? null : async () => {
           await getSupabase()?.auth.signOut();
