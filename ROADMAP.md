@@ -18,9 +18,13 @@ singular values, mission thresholds verified numerically) · matrix
 calculus (Jacobian shape explorer + ∂L/∂W = δxᵀ outer-product heatmap).
 Unlocks reading real backprop derivations + LoRA.
 
-## 3. World 2 depth: convexity + Taylor/Hessian
-2 lessons: convex vs non-convex (why convexity = global guarantees) ·
-second-order view (Taylor expansion lab; Newton's method vs GD race).
+## 3. World 2 depth: convexity + Taylor/Hessian ✅ SHIPPED
+`lib/curriculum/calc-depth.js` — 2 lessons, slotted after gradient descent
+(order 13.3/13.6): convexity (chord-test lab proving non-convexity on a
+double-well · GD-traps lab showing start-dependent minima vs the convex
+bowl) · the second-order view (Taylor line-vs-parabola lab reading f″ as
+curvature · Newton-vs-GD race lab — Newton nails a quadratic in one step
+while GD crawls). Sets up the Hessian/eigenvalue view of optimization.
 
 ## 4. World 3 breadth: classical ML + evaluation
 3 lessons: logistic regression (as MLE — ties world 2.5) · trees & ensembles
