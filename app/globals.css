@@ -159,6 +159,18 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
 @keyframes expand{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .quiz-prog{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:10px}
 
+/* ===== Multi-lab sub-stepper ===== */
+.lab-prog{font-size:12px;color:var(--accent2);font-weight:800;letter-spacing:.5px;margin-bottom:8px}
+.lab-dots{display:flex;gap:6px;margin-bottom:14px}
+.lab-dot{width:26px;height:5px;border-radius:3px;background:rgba(255,255,255,.12)}
+.lab-dot.active{background:var(--accent)}
+.lab-dot.done{background:var(--good)}
+.lab-intro{background:var(--bg2);border:1px solid rgba(124,92,255,.22);border-left:3px solid var(--accent2);
+  border-radius:10px;padding:13px 16px;margin-bottom:16px;font-size:14px;line-height:1.65;color:#cdd4f0}
+.lab-intro p{margin-bottom:9px}.lab-intro p:last-child{margin-bottom:0}
+.lab-intro b,.lab-intro strong{color:var(--ink)}
+.lab-intro code{font-family:var(--mono);background:var(--card2);padding:2px 6px;border-radius:5px;font-size:.9em;color:#aee8ff}
+
 /* ===== Complete screen ===== */
 .complete{text-align:center;padding:46px 20px}
 .complete .big{font-size:60px;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
