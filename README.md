@@ -152,9 +152,9 @@ engine.js):
 |---|---|---|
 | `pre` | World 0 — Foundations | `extra.js` |
 | `la` | World 1 — Linear Algebra | `index.js` (core) + `la-depth.js` (rank/SVD/matrix calculus) |
-| `calc` | World 2 — Calculus | `index.js` (core) |
-| `prob` | World 2.5 — Probability & Statistics | `prob.js` |
-| `ml` | World 3 — Machine Learning | `ml.js` |
+| `calc` | World 2 — Calculus | `index.js` (core) + `calc-depth.js` (convexity/second-order) |
+| `prob` | World 3 — Probability & Statistics | `prob.js` |
+| `ml` | World 4 — Machine Learning | `ml.js` |
 
 **Canvas lab helpers** (exported from `engine.js`):
 - `makeLab(stage, opts?)` — builds `[canvas + readout | controls]` layout,
@@ -226,7 +226,7 @@ ai-math/
 │       ├── la-depth.js                     # World 1 depth: rank & four subspaces,
 │       │                                   # SVD (image compression), matrix calculus
 │       │                                   # (slot between la-eigen and la-boss via order:)
-│       ├── prob.js                         # World 2.5 (prob): 6 lessons, RVs → entropy/KL
+│       ├── prob.js                         # World 3 (prob): 6 lessons, RVs → entropy/KL
 │       └── ml.js                           # World 3 (ml): 6 lessons from learning to GPTs
 │
 ├── db/

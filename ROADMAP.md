@@ -3,7 +3,7 @@
 Each increment = one session of work, shippable on its own. Order matters —
 later items depend on earlier vocabulary.
 
-## 1. World 2.5 — Probability & Statistics (the disqualifying gap) ✅ SHIPPED
+## 1. World 3 — Probability & Statistics (the disqualifying gap) ✅ SHIPPED
 `lib/curriculum/prob.js` — 6 lessons: random variables & expectation (dice-simulator lab) · common
 distributions (parameter sliders) · Bayes' theorem (medical-test lab) ·
 MLE (drag a Gaussian over data, watch log-likelihood climb) · sampling &
@@ -27,7 +27,7 @@ curvature · Newton-vs-GD race lab — Newton nails a quadratic in one step
 while GD crawls). Sets up the Hessian/eigenvalue view of optimization.
 
 ## 4. World 3 breadth: classical ML + evaluation
-3 lessons: logistic regression (as MLE — ties world 2.5) · trees & ensembles
+3 lessons: logistic regression (as MLE — ties world 3) · trees & ensembles
 (build a stump forest interactively) · evaluation methodology (precision/
 recall/ROC threshold slider — reuse quiz_answers data for realism).
 
