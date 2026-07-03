@@ -263,6 +263,23 @@ npm install
 npm run dev          # DATABASE_URL defaults to localhost:5433
 ```
 
+## Tests & the pre-push gate
+
+`npm test` runs `test/smoke.mjs` — a zero-dependency smoke test that loads the
+real curriculum in Node and asserts it's coherent (imports without error,
+`validateCurriculum()` clean, unique ids, every interactive resolves, every
+quiz well-formed, plus `registerLesson` shape/idempotency unit tests). It
+needs only Node, no database or `node_modules`.
+
+A tracked `pre-push` hook in `.githooks/` runs these before every push. Enable
+it once per clone:
+
+```bash
+npm run hooks        # git config core.hooksPath .githooks
+```
+
+(Bypass in an emergency with `git push --no-verify`.)
+
 ## Auth
 
 Access requires a **Supabase Auth** account (email + password). The React

@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "NODE_NO_WARNINGS=1 node test/smoke.mjs",
+    "hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

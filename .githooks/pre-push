@@ -1,0 +1,10 @@
+#!/bin/sh
+# Pre-push gate: curriculum smoke tests must pass before any push.
+# Enable once per clone with: npm run hooks   (sets core.hooksPath=.githooks)
+echo "→ pre-push: running curriculum smoke tests…"
+if ! NODE_NO_WARNINGS=1 node "$(git rev-parse --show-toplevel)/test/smoke.mjs"; then
+  echo "✗ smoke tests failed — push aborted. (bypass with --no-verify only if you know why)"
+  exit 1
+fi
+echo "✓ smoke tests passed"
+exit 0
