@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "NODE_NO_WARNINGS=1 node test/smoke.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
@@ -16,5 +17,8 @@
     "pg": "^8.13.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
   }
 }

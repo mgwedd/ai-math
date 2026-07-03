@@ -37,7 +37,6 @@ Postgres-backed progress, wired together with Docker Compose.
 │  │  │  registry reads at render time:                       │   │
 │  │  │    LESSONS[]        lesson metadata + quiz pools      │   │
 │  │  │    INTERACTIVES{}   canvas lab functions              │   │
-│  │  │    WRONG_WHY{}      per-wrong-answer feedback         │   │
 │  │  │    SCORING / LEVELS XP economy + level curve         │   │
 │  │  └───────────────────────────────────────────────────────┘   │
 │  │                                                              │
@@ -134,13 +133,16 @@ hoist and would race with the top-level `registerLesson` calls).
   }
   ```
 
-- `WRONG_WHY{}` — keyed `[lessonId][questionIdx][wrongOptIdx]` → HTML
-  string explaining the specific misconception behind that wrong choice.
-  Falls back to a generic nudge when the entry is absent.
+- `q.wrong` — inline on each quiz question: `{wrongOptIdx: htmlString}`
+  explaining the specific misconception behind that wrong choice. Falls
+  back to a generic nudge when an option has no entry. (Feedback rides on
+  the question itself — there is no index-parallel table to fall out of
+  sync when a question is inserted or reordered.)
 
-- `QMETA{}` — optional per-question tags: `[lessonId][qi] = {tag, focus}`.
-  Used for post-quiz weak-area assessment and the REVIEW chip on lesson
-  cards. Inline `q.tag`/`q.focus` take precedence over QMETA.
+- `q.tag` / `q.focus` — optional inline per-question metadata: a short
+  concept label + a study-focus sentence, used for the post-quiz weak-area
+  assessment and the REVIEW chip on lesson cards. `metaOf()` falls back to
+  the lesson title when absent.
 
 **XP economy** (all knobs in `SCORING`, `LEVELS` — `registry.js`, not
 engine.js):
@@ -215,17 +217,16 @@ ai-math/
 │   │                                       #   exports: mount, go, S, levelInfo
 │   │                                       #           makeLab, slider, chips, plane,
 │   │                                       #           clearBg, fmt2, registerCleanup
-│   │                                       #           LESSONS, INTERACTIVES, WRONG_WHY,
-│   │                                       #           QMETA, SCORING
+│   │                                       #           LESSONS, INTERACTIVES, SCORING
 │   │                                       #   defines: WORLD_META{}, WORLD_ORDER[]
 │   │
 │   └── curriculum/
 │       ├── registry.js                     # shared mutable registries + economy constants
-│       │                                   #   LESSONS[], INTERACTIVES{}, WRONG_WHY{},
-│       │                                   #   QMETA{}, SCORING{}, LEVELS[]
+│       │                                   #   LESSONS[], INTERACTIVES{},
+│       │                                   #   SCORING{}, LEVELS[] + registerLesson()
 │       ├── index.js                        # World 1 (la) + World 2 (calc) core lessons
 │       │                                   # dynamically imports extra.js then ml.js
-│       ├── extra.js                        # World 0 (pre) lessons, QMETA tags,
+│       ├── extra.js                        # World 0 (pre) lessons,
 │       │                                   # go-deeper cards for la/calc lessons,
 │       │                                   # extra lessons (la-inverse, c-exp)
 │       ├── la-depth.js                     # World 1 depth: rank & four subspaces,
@@ -265,14 +266,17 @@ npm run dev          # DATABASE_URL defaults to localhost:5433
 
 ## Tests & the pre-push gate
 
-`npm test` runs `test/smoke.mjs` — a zero-dependency smoke test that loads the
-real curriculum in Node and asserts it's coherent (imports without error,
-`validateCurriculum()` clean, unique ids, every interactive resolves, every
-quiz well-formed, plus `registerLesson` shape/idempotency unit tests). It
-needs only Node, no database or `node_modules`.
+`npm test` runs the [Vitest](https://vitest.dev) suite in `test/` (`vitest run`;
+`npm run test:watch` for watch mode). The `curriculum.test.mjs` smoke suite loads
+the real curriculum in a node environment (browser globals stubbed) and asserts
+it's coherent: imports without error (catches the syntax / Unicode-prime /
+smart-quote class), `validateCurriculum()` clean, unique ids, every interactive
+resolves, every quiz well-formed, wrong-answer feedback present and valid inline
+on questions, plus `registerLesson` shape/idempotency unit tests. It needs no
+database — just `npm install` (Vitest is the only devDependency).
 
-A tracked `pre-push` hook in `.githooks/` runs these before every push. Enable
-it once per clone:
+A tracked `pre-push` hook in `.githooks/` runs `npm test` before every push.
+Enable it once per clone:
 
 ```bash
 npm run hooks        # git config core.hooksPath .githooks
@@ -343,10 +347,10 @@ GET  /api/leaderboard    top 20 by xp (usernames from profiles)
 ## Extending the curriculum
 
 Lessons are pure data — see the schema comment at the top of
-`lib/curriculum/index.js`. Add a lesson by pushing an object into `LESSONS`
-and registering its lab in `INTERACTIVES`; wrong-answer feedback lives in
-`WRONG_WHY` keyed by lesson id → question → wrong option. Progress is keyed
-by lesson `id`, so adding/removing/reordering lessons never corrupts saved
+`lib/curriculum/index.js`. Add a lesson by calling `registerLesson({...})`
+and registering its lab in `INTERACTIVES`; wrong-answer feedback lives
+inline on each quiz question as `q.wrong` (`{wrongOptIdx: html}`). Progress
+is keyed by lesson `id`, so adding/removing/reordering lessons never corrupts saved
 state. New lesson modules can also live in their own files — import them
 from `lib/curriculum/index.js`.
 
