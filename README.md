@@ -92,10 +92,15 @@ exposed on `window.go`), and manages a single serializable state object `S`.
   N-1 is in `S.done`. First lesson in each world is always unlocked.
 
 **Curriculum = pure data** registered into shared registries from
-`lib/curriculum/registry.js`. The engine reads these at render time; pushing
-to `LESSONS` or assigning to `INTERACTIVES` is all that's needed to add
-content. Curriculum files load via dynamic import in `index.js` to guarantee
-push order (static imports hoist and would race with LESSONS.push).
+`lib/curriculum/registry.js`. The engine reads these at render time. To add a
+lesson, call `registerLesson({…})` (the single validated entry point — it
+checks lesson shape and is idempotent by id, so hot-reload can't duplicate
+lessons) and assign its `INTERACTIVES[key]` function. After all modules load,
+`index.js` calls `validateCurriculum()` to cross-check that every interactive
+key resolves and the feedback tables line up with the quiz pools — problems
+are logged loudly to the console at load time. Curriculum files load via
+dynamic import in `index.js` to guarantee registration order (static imports
+hoist and would race with the top-level `registerLesson` calls).
 
 - `LESSONS[]` — ordered array of lesson objects. Schema:
   ```js
