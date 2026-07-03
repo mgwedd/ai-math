@@ -1,16 +1,5 @@
 # ai-math — Gradient Ascent
 
-> **TODO (security):** Production (Vercel → Supabase) currently runs with
-> `DATABASE_SSL=no-verify` — TLS encrypted but **chain verification disabled**,
-> because pinning `prod-ca-2021.crt` via `DATABASE_SSL_CA` failed with
-> `SELF_SIGNED_CERT_IN_CHAIN`. Likely cause: the Supavisor pooler
-> (`*.pooler.supabase.com:6543`) presents a chain rooted differently from the
-> direct-connection CA we pinned. To fix: capture the pooler's real root —
-> `openssl s_client -starttls postgres -connect <pooler-host>:6543 -showcerts`
-> — pin the last cert in the output via `DATABASE_SSL_CA`, remove
-> `DATABASE_SSL`, redeploy, confirm `/api/health` is 200. Code already
-> prefers `DATABASE_SSL_CA` when both are set (see `lib/db.js`).
-
 Gamified, interactive math curriculum aimed at engineers heading toward AI
 research. Next.js (App Router) + a framework-free canvas game engine,
 Postgres-backed progress, wired together with Docker Compose.
@@ -368,3 +357,15 @@ integration's name), optional `DATABASE_SSL_CA` (PEM, verified TLS) or
 (they're public values, from the dashboard's API settings).
 
 To wipe all progress: `docker compose down -v`.
+
+
+> **TODO (security):** Production (Vercel → Supabase) currently runs with
+> `DATABASE_SSL=no-verify` — TLS encrypted but **chain verification disabled**,
+> because pinning `prod-ca-2021.crt` via `DATABASE_SSL_CA` failed with
+> `SELF_SIGNED_CERT_IN_CHAIN`. Likely cause: the Supavisor pooler
+> (`*.pooler.supabase.com:6543`) presents a chain rooted differently from the
+> direct-connection CA we pinned. To fix: capture the pooler's real root —
+> `openssl s_client -starttls postgres -connect <pooler-host>:6543 -showcerts`
+> — pin the last cert in the output via `DATABASE_SSL_CA`, remove
+> `DATABASE_SSL`, redeploy, confirm `/api/health` is 200. Code already
+> prefers `DATABASE_SSL_CA` when both are set (see `lib/db.js`).
