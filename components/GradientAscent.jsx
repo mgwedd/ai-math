@@ -162,9 +162,10 @@ export default function GradientAscent() {
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
+    const supabase = DEV_MODE ? null : getSupabase();
     (async () => {
       await import('@/lib/curriculum/index.js'); // registers lessons
-      const { mount } = await import('@/lib/engine.js');
+      const { mount, setAuthLinkState } = await import('@/lib/engine.js');
       if (cancelled) return;
       mount({ // idempotent — safe under StrictMode double-invoke
         userLabel: (session.user.email || 'learner').split('@')[0],
@@ -174,7 +175,29 @@ export default function GradientAscent() {
           await getSupabase()?.auth.signOut();
           location.reload();
         },
+        // Supabase manual linking: let an email/password learner attach their
+        // Google identity. Full-page OAuth redirect; on return the browser
+        // client exchanges the code and the auth-state effect re-runs.
+        onLinkIdentity: supabase ? async () => {
+          const { error } = await supabase.auth.linkIdentity({
+            provider: 'google',
+            options: { redirectTo: window.location.origin },
+          });
+          if (error) alert('Couldn’t start Google linking: ' + error.message);
+        } : null,
       });
+      // Reflect current identities in the account menu (which providers are
+      // already linked). Only email-based accounts without Google see "Link".
+      if (supabase) {
+        try {
+          const { data } = await supabase.auth.getUserIdentities();
+          if (cancelled) return;
+          const ids = data?.identities || [];
+          const linked = ids.some((i) => i.provider === 'google');
+          const hasEmail = ids.some((i) => i.provider === 'email');
+          setAuthLinkState({ linked, linkable: hasEmail && !linked });
+        } catch { /* linking UI simply stays hidden */ }
+      }
     })();
     return () => { cancelled = true; };
   }, [session]);
