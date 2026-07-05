@@ -65,9 +65,27 @@ header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px
 .hero h1 span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{color:var(--muted);margin-top:10px;font-size:15px;max-width:560px;margin-left:auto;margin-right:auto}
 .world{margin-top:36px}
-.world-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+.world-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;position:relative}
 .world-head h2{font-size:20px;font-weight:800}
 .world-head .wprog{color:var(--muted);font-size:13px;font-weight:600}
+
+/* per-world / per-lesson ⋮ tools (available to every learner) */
+.admin-dots{background:none;border:1px solid rgba(255,255,255,.12);color:var(--muted);
+  width:26px;height:26px;line-height:1;border-radius:8px;cursor:pointer;font-size:16px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s,color .15s}
+.admin-dots:hover{background:rgba(124,92,255,.18);color:var(--ink)}
+.world-head .admin-dots{margin-left:auto}
+/* world collapse/expand caret — sits at the start of the world header */
+.world-collapse{background:none;border:none;color:var(--muted);cursor:pointer;padding:0;
+  width:22px;height:22px;line-height:1;font-size:13px;align-self:center;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.world-collapse:hover{background:rgba(124,92,255,.18);color:var(--ink)}
+.world.collapsed .world-head{margin-bottom:0}
+/* 🔓 badge on a lesson unlocked manually (prereqs not met), mirrors .lock/.check slot */
+.lcard .unlock-badge{position:absolute;top:12px;right:12px;font-size:16px;opacity:.9}
+/* offset from the ✓ / 🔒 badge (both sit at top:12px;right:12px) */
+.admin-dots-card{position:absolute;top:11px;right:44px;z-index:5}
+.admin-menu{min-width:170px}
 .lessons-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:14px}
 .lcard{position:relative;background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:var(--radius);
   padding:16px;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;overflow:hidden}
