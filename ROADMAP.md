@@ -36,6 +36,34 @@ in `lesson-reports/` (web-grounded audit; chip away between increments).
   gradient ⟂ contours, q/k/v projections, pre-norm/positional encoding, etc.
   Standing rules: quiz stems self-contained (never lab-recall);
   instructor-grade fidelity (no folk theorems).
+- **Curriculum architecture — ladder steps 1–2** (`registry.js`, PR #1): a
+  single validated entry point `registerLesson()` (idempotent by id → HMR-
+  safe; loud load-time errors instead of silent render-time failures), and
+  the death of the index-parallel feedback tables — `WRONG_WHY`/`QMETA` are
+  gone; feedback now rides inline on the question (`q.wrong`, `q.tag`,
+  `q.focus`). `validateCurriculum()` enforces shape + inline-key validity.
+- **Test + CI gate** (PR #1): a zero-config Vitest smoke suite (`npm test` →
+  `test/curriculum.test.mjs`) — asserts the curriculum loads, validation is
+  clean, and inline feedback is well-formed — wired to a pre-push hook and a
+  GitHub Actions matrix (Node 22/24).
+
+### In flight (open PRs this wave — the "second half" build-out)
+Parallel worktree PRs, one file each, each independently mergeable:
+- **World 1** — orthogonality/projection/least-squares/Gram–Schmidt
+  (`la-projection.js`) → P0 #4.
+- **World 2** — multivariable/tangent-plane, Jacobian chain rule, Lagrange
+  (`calc-multivariable.js`) → P0 #6.
+- **World 3** — joint/conditional/covariance (`prob-structure.js`, P0 #8);
+  statistics & evidence: estimators, CIs, permutation tests (`stat.js`, P0 #5).
+- **World 4** — logistic-regression-as-MLE + regularization
+  (`ml-classification.js`), trees/ensembles/evaluation (`ml-trees-eval.js`),
+  in-browser MLP capstone (`ml-capstone.js`) → P0 #1, #2.
+- **Engine UX** — URL routing + browser history (deep-linkable lessons,
+  working back/forward) via the History API (`engine.js`).
+
+When this wave lands, P0 items 1, 2, 4, 5, 6, 8 are shipped — leaving
+production-mode assessment (#3) and the spaced-repetition/exam loop (#7) as
+the P0 remainder, plus the per-file fidelity/depth backlog below.
 
 ---
 
@@ -145,19 +173,19 @@ data, canvas interactives, feedback tables), and several implicit couplings
 have already caused real failures this cycle. Refactor ladder, ordered by
 leverage — each step one session, shippable alone, zero behavior change:
 
-1. **`registerLesson()` as the single entry point (validate at load).**
-   Replace bare `LESSONS.push({…})` with a registry function that checks:
-   unique id · `interactive`/`labs` keys resolve in INTERACTIVES · quiz
-   shape (4 opts, `a` in range) · feedback indices align with pool length.
-   Make it idempotent by id (replace, not append) — which also fixes the
-   HMR duplicate/vanishing-lesson problem that currently forces dev-server
-   restarts. ~40 lines in registry.js; turns silent render-time failures
-   (typo'd interactive key, missing import) into loud load-time errors.
-2. **Kill the index-parallel feedback tables.** `WRONG_WHY[id][qi][opt]`
-   and `QMETA[id][qi]` are keyed by question *index* — inserting one quiz
-   question silently misaligns every entry after it. Move both inline onto
-   the question object (`q.wrongWhy = {1:…}`; `q.tag`/`q.focus` already
-   take precedence today). Mechanical migration, no engine change.
+1. ✅ **DONE (PR #1) — `registerLesson()` as the single validated entry
+   point.** Replaced bare `LESSONS.push({…})`; checks unique id ·
+   `interactive`/`labs` keys resolve · quiz shape · inline feedback indices
+   valid. Idempotent by id (fixes HMR duplicate/vanishing-lesson). Silent
+   render-time failures are now loud load-time errors via `validateCurriculum()`.
+2. ✅ **DONE (PR #1) — killed the index-parallel feedback tables.**
+   `WRONG_WHY[id][qi][opt]` and `QMETA[id][qi]` were index-keyed (insert one
+   question → every later entry misaligns). Migrated inline onto the question
+   object (`q.wrong = {1:…}`, `q.tag`, `q.focus`); registries removed. (Watch
+   item for future migrations: sub-agents editing Unicode-heavy files can
+   swap ASCII `'` string *delimiters* for smart quotes — passes `node --check`
+   but breaks the real ESM import + SWC build; guard with a real-import +
+   smart-quote-count self-check.)
 3. **Move `WORLD_META`/`WORLD_ORDER` from engine.js into registry.js.**
    Adding a world currently means editing the engine — the one standing
    violation of "curriculum is pure data."
@@ -192,6 +220,8 @@ leverage — each step one session, shippable alone, zero behavior change:
 - Re-run the per-lesson audit (`lesson-reports/` pattern, sonnet agents) on
   every new module before shipping; cite one source per `deeper` card.
 - Quiz stems self-contained; derivatives use Unicode primes ′ ″ in source;
-  verify in the running dev server (SWC catches what node --check won't).
+  string *delimiters* stay ASCII `'`/backtick (smart quotes ' " pass
+  `node --check` but break the ESM import + SWC build); verify in the running
+  dev server, not just node.
 - Every new lesson meets the multi-lab bar: 2–3 labs, meaty learn text,
-  WRONG_WHY per distractor, ml-note anchoring.
+  inline `q.wrong` per distractor, ml-note anchoring.
