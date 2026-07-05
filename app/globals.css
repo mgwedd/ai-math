@@ -65,9 +65,19 @@ header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px
 .hero h1 span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{color:var(--muted);margin-top:10px;font-size:15px;max-width:560px;margin-left:auto;margin-right:auto}
 .world{margin-top:36px}
-.world-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+.world-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;position:relative}
 .world-head h2{font-size:20px;font-weight:800}
 .world-head .wprog{color:var(--muted);font-size:13px;font-weight:600}
+
+/* admin ⋮ tools (only rendered for allowlisted admins) */
+.admin-dots{background:none;border:1px solid rgba(255,255,255,.12);color:var(--muted);
+  width:26px;height:26px;line-height:1;border-radius:8px;cursor:pointer;font-size:16px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;padding:0;transition:background .15s,color .15s}
+.admin-dots:hover{background:rgba(124,92,255,.18);color:var(--ink)}
+.world-head .admin-dots{margin-left:auto}
+/* offset from the ✓ / 🔒 badge (both sit at top:12px;right:12px) */
+.admin-dots-card{position:absolute;top:11px;right:44px;z-index:5}
+.admin-menu{min-width:170px}
 .lessons-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:14px}
 .lcard{position:relative;background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:var(--radius);
   padding:16px;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s;overflow:hidden}
