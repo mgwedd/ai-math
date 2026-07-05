@@ -89,6 +89,25 @@ function AuthGate() {
     setBusy(false);
   }
 
+  // Passkey (WebAuthn) sign-in: no email/password needed. Supabase runs the
+  // full ceremony (navigator.credentials.get) and creates the session, after
+  // which the auth listener in GradientAscent drops the user into the game.
+  async function passkeySignIn() {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setMsg({ kind: 'error', text: 'Auth is not configured — missing NEXT_PUBLIC_SUPABASE_URL / key.' });
+      return;
+    }
+    setBusy(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.signInWithPasskey();
+      if (error) throw error;
+    } catch (err) {
+      setMsg({ kind: 'error', text: err.message || 'Passkey sign-in failed or was cancelled.' });
+    }
+    setBusy(false);
+  }
+
   return (
     <div className={'modal-back auth-back' + (settled ? ' settled' : '')}>
       <form className="modal" onSubmit={submit}>
@@ -129,6 +148,14 @@ function AuthGate() {
         <button className="btn" disabled={busy} type="submit">
           {busy ? '…' : mode === 'signin' ? 'Sign in →' : 'Create account →'}
         </button>
+        {mode === 'signin' && (
+          <>
+            <div className="auth-or"><span>or</span></div>
+            <button type="button" className="btn btn-alt" disabled={busy} onClick={passkeySignIn}>
+              🔑 Sign in with a passkey
+            </button>
+          </>
+        )}
         <p style={{ marginTop: '14px', marginBottom: 0 }}>
           {mode === 'signin' ? 'New here? ' : 'Already registered? '}
           <a
@@ -184,6 +211,18 @@ export default function GradientAscent() {
             options: { redirectTo: window.location.origin },
           });
           if (error) alert('Couldn’t start Google linking: ' + error.message);
+        } : null,
+        // Register a passkey (WebAuthn) for the signed-in learner. Supabase runs
+        // the full ceremony (navigator.credentials.create) against the current
+        // session; no redirect. A brief alert reports the outcome.
+        onRegisterPasskey: supabase ? async () => {
+          try {
+            const { error } = await supabase.auth.registerPasskey();
+            alert(error ? ('Couldn’t register a passkey: ' + error.message)
+                        : 'Passkey registered — you can now sign in with it.');
+          } catch (err) {
+            alert('Couldn’t register a passkey: ' + (err?.message || err));
+          }
         } : null,
       });
       // Reflect current identities in the account menu (which providers are
