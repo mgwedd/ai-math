@@ -1,3 +1,27 @@
+# Self-hosting Minima with LOCAL email/password auth — no cloud Supabase.
+#
+#   docker compose up -d --build
+#
+# brings up: db (postgres) -> auth (GoTrue, owns the auth schema + runs its own
+# migrations) -> migrate (one-shot: applies supabase/migrations, then exits) ->
+# app (Next.js) + proxy (nginx, makes GoTrue look like a Supabase auth endpoint).
+# Register + sign in with email/password entirely on your own machine.
+#
+# SECURITY: the JWT secret and anon key below are the WELL-KNOWN Supabase local
+# demo values — fine for a laptop, but they must be regenerated for any real /
+# internet-facing deployment. See docs/DEPLOYMENT.md.
+#
+# Passkeys and Google sign-in are intentionally NOT available locally (they need
+# a public domain + OAuth credentials); use email/password locally.
+#
+# Zero-login dev bypass (skip registration): see docker-compose.dev-auth.yml.
+# Longer-lived / external persistence: see docker-compose.persist.yml.
+
+x-local-jwt-secret: &jwt_secret "super-secret-jwt-token-with-at-least-32-characters-long"
+# anon key: a JWT with role=anon, HS256-signed by the demo secret above and
+# minted for it (iss=supabase-demo, non-expiring for local use). LOCAL ONLY.
+x-local-anon-key: &anon_key "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.F_rDxRTPE8OU83L_CNgEGXfmirMXmMMugT29Cvc8ygQ"
+
 services:
   db:
     image: postgres:16-alpine
@@ -8,8 +32,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-aimath}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # init only creates the auth schema + roles + auth.uid() (NOT auth.users:
+      # GoTrue owns that). App migrations run later via the `migrate` service.
       - ./db/init:/docker-entrypoint-initdb.d:ro
-      - ./supabase/migrations:/migrations:ro
     ports:
       # host port 5433 to avoid clashing with a local postgres on 5432
       - "${POSTGRES_PORT:-5433}:5432"
@@ -19,22 +44,94 @@ services:
       timeout: 3s
       retries: 15
 
+  # GoTrue — Supabase's auth server. Owns the `auth` schema (runs its own
+  # migrations creating auth.users/identities/sessions/…) and issues the JWTs.
+  auth:
+    image: supabase/gotrue:v2.177.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      # GoTrue connects as the app's postgres superuser and works inside `auth`.
+      GOTRUE_DB_DATABASE_URL: postgres://${POSTGRES_USER:-aimath}:${POSTGRES_PASSWORD:-aimath_dev}@db:5432/${POSTGRES_DB:-aimath}?search_path=auth&sslmode=disable
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: "*"
+      API_EXTERNAL_URL: http://localhost:8000
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      GOTRUE_JWT_SECRET: *jwt_secret
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      # No SMTP locally — confirm signups instantly so the token is issued now.
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: apply the app's supabase/migrations AFTER GoTrue created
+  # auth.users, then exit. `app` waits for this to complete successfully.
+  migrate:
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      auth:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aimath}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aimath_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-aimath}
+    volumes:
+      - ./db/migrate:/migrate:ro
+      - ./supabase/migrations:/migrations:ro
+    entrypoint: ["sh", "/migrate/apply-migrations.sh"]
+
+  # Makes GoTrue look like a Supabase auth endpoint: /auth/v1/* -> GoTrue root.
+  # The browser reaches it at http://localhost:8000; the app container reaches
+  # it at http://proxy:8000 over the compose network.
+  proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      auth:
+        condition: service_healthy
+    volumes:
+      - ./db/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${SUPABASE_PROXY_PORT:-8000}:8000"
+
   app:
     build:
       context: .
       args:
-        # local stack has no Supabase auth server -> dev identity bypass.
-        # NEVER set these on a real deployment (code refuses on Vercel).
-        NEXT_PUBLIC_DEV_AUTH: "1"
+        # Baked into the browser bundle. The browser (on the host) reaches the
+        # proxy at localhost:8000; the anon key is the local demo key.
+        NEXT_PUBLIC_SUPABASE_URL: http://localhost:${SUPABASE_PROXY_PORT:-8000}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: *anon_key
     restart: unless-stopped
     environment:
-      DEV_AUTH: "1"
+      # Server-side: reach the proxy over the compose network (takes precedence
+      # over NEXT_PUBLIC_SUPABASE_URL in lib/auth-server.js).
+      SUPABASE_URL: http://proxy:8000
+      SUPABASE_ANON_KEY: *anon_key
       DATABASE_URL: postgres://${POSTGRES_USER:-aimath}:${POSTGRES_PASSWORD:-aimath_dev}@db:5432/${POSTGRES_DB:-aimath}
     ports:
       - "${APP_PORT:-3000}:3000"
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      proxy:
+        condition: service_started
 
 volumes:
+  # In-project named volume. `docker compose down` KEEPS it (progress survives);
+  # only `docker compose down -v` wipes it. For persistence that survives even a
+  # full `down -v`, see docker-compose.persist.yml.
   pgdata:

@@ -1,0 +1,29 @@
+# OPT-IN zero-login dev bypass. Skips GoTrue/registration entirely and trusts a
+# fixed dev identity (dev@astrealabs.com) — for hacking on the app without
+# signing up. NEVER for anything internet-facing (the code refuses DEV_AUTH on
+# Vercel regardless).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev-auth.yml up -d --build
+#
+# This overrides the `app` build/runtime to the dev bypass and drops the auth
+# dependency chain. The `auth`, `proxy`, and `migrate` services still start, but
+# the app ignores them. `migrate` seeds the dev user so its progress FK holds.
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_DEV_AUTH: "1"
+        # blank out the baked Supabase URL/key so the browser client is inert
+        NEXT_PUBLIC_SUPABASE_URL: ""
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
+    environment:
+      DEV_AUTH: "1"
+
+  # Seed the fixed dev identity so the DEV_AUTH bypass has a real auth.users row.
+  migrate:
+    volumes:
+      - ./db/migrate:/migrate:ro
+      - ./supabase/migrations:/migrations:ro
+      - ./db/dev-seed:/dev-seed:ro
+    entrypoint: ["sh", "-c", "sh /migrate/apply-migrations.sh && PGPASSWORD=$$POSTGRES_PASSWORD psql -v ON_ERROR_STOP=1 -h db -U $$POSTGRES_USER -d $$POSTGRES_DB -f /dev-seed/dev-seed.sql"]
