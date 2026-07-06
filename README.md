@@ -69,7 +69,7 @@ Every lesson also has a **"why this matters for AI"** sidebar and optional
 
 The easiest way to use Minima is the **hosted version — free, no setup:**
 
-### **→ [math.astrealabs.com](https://math.astrealabs.com)**
+### **→ [minima.astrealabs.com](https://minima.astrealabs.com)**
 
 Register with a passkey, Google, or email and start learning. Your progress
 syncs to your account and follows you across devices.
