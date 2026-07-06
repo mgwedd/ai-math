@@ -296,6 +296,46 @@ app is same-origin with its auth endpoint, exactly like production. The internal
 WebAuthn support. This override is purely for a clean URL and TLS parity; use
 email/password.
 
+### Optional: access over Tailscale (real cert, any device)
+
+If you're on [Tailscale](https://tailscale.com/), you can reach the stack from
+any device on your tailnet at a **real, browser-trusted HTTPS URL** — no public
+DNS record, no `/etc/hosts`, and **no self-signed-cert warning**. Tailscale's
+[MagicDNS](https://tailscale.com/kb/1081/magicdns) gives your machine a name and
+[`tailscale serve`](https://tailscale.com/kb/1242/tailscale-serve) fronts it with
+an auto-provisioned Let's Encrypt cert. (Enable **MagicDNS** and **HTTPS
+certificates** in the tailnet admin console first.)
+
+This reuses the HTTPS override — Tailscale terminates TLS with the trusted cert
+and proxies to the local self-signed nginx, so the self-signed cert never reaches
+a browser. `FRONTDOOR_URL` points the browser bundle and GoTrue at your node's
+name instead of the local DNS hostname.
+
+```bash
+# 1. Your node's MagicDNS name (drop the trailing dot):
+NODE=$(tailscale status --json | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
+echo "$NODE"   # e.g. my-mac.tailnet-abcd.ts.net
+
+# 2. Build + run the HTTPS override with that origin:
+FRONTDOOR_URL="https://$NODE" \
+  docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+
+# 3. Front it with a trusted Tailscale cert (proxies to the local self-signed nginx):
+tailscale serve --bg https+insecure://localhost:443
+
+# 4. Open https://$NODE from any device on your tailnet — real cert, no warning.
+```
+
+Notes:
+
+- If host port `443` needs privileges on your machine, publish nginx elsewhere
+  (`HTTPS_PORT=8443 …`) and point serve at it: `https+insecure://localhost:8443`.
+- `tailscale serve` keeps the stack **private to your tailnet**. To expose it to
+  the public internet, swap `serve` → `funnel` — but don't, while the stack still
+  uses the demo JWT secret / anon key (see the security note below).
+- **Passkeys still won't work** — a trusted cert and real origin remove the
+  browser-side blockers, but self-hosted GoTrue has no WebAuthn endpoints at all.
+
 ### ⚠️ Security: the local secrets are demo values — change them for any real deployment
 
 The compose stack hardcodes the **well-known Supabase local demo** JWT secret and

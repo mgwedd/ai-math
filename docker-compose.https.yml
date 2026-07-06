@@ -19,13 +19,17 @@
 # proxy at http://proxy:8000 over the compose network. Passkeys still don't work
 # locally (self-hosted GoTrue has no WebAuthn); this is purely for a clean URL
 # and TLS parity with production. See docs/DEPLOYMENT.md.
+#
+# FRONTDOOR_URL overrides the browser origin (default: the local DNS hostname).
+# Set it to front the stack behind a different origin — e.g. a Tailscale node's
+# https://<node>.ts.net — without editing this file. See docs/DEPLOYMENT.md.
 
 services:
   auth:
     environment:
       # GoTrue mints confirmation/redirect links against the browser origin.
-      GOTRUE_SITE_URL: https://minima.local.astrealabs.com
-      API_EXTERNAL_URL: https://minima.local.astrealabs.com
+      GOTRUE_SITE_URL: ${FRONTDOOR_URL:-https://minima.local.astrealabs.com}
+      API_EXTERNAL_URL: ${FRONTDOOR_URL:-https://minima.local.astrealabs.com}
 
   proxy:
     # Generate the self-signed cert (if absent), then run nginx against the
@@ -45,7 +49,7 @@ services:
     build:
       args:
         # Baked into the browser bundle: reach the HTTPS front door same-origin.
-        NEXT_PUBLIC_SUPABASE_URL: https://minima.local.astrealabs.com
+        NEXT_PUBLIC_SUPABASE_URL: ${FRONTDOOR_URL:-https://minima.local.astrealabs.com}
 
 volumes:
   # Self-signed TLS cert for the HTTPS front door — generated on first start.
