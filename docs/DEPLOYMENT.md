@@ -173,6 +173,15 @@ your progress persists to a local Postgres. Nothing leaves your machine.
 Startup order is enforced with healthchecks and `depends_on`:
 `db` (healthy) → `auth` (healthy) → `migrate` (completed) → `app`.
 
+> **`auth` crash-loops with `no schema has been selected to create in`
+> (SQLSTATE `3F000`)?** GoTrue is trying to create its tables in the `auth`
+> schema, but that schema is missing. The schema is created by the `db/init/`
+> scripts, which Postgres runs **only on a fresh data directory** — so a
+> **`pgdata` volume left over from before the GoTrue integration** never got it
+> (the db log shows `Skipping initialization`). Fix: `docker compose down -v`
+> once to drop the stale volume, then `up --build` re-initialises it. (This
+> wipes local progress; it only affects volumes predating local auth.)
+
 ### Browser-vs-server URL split (why there are two Supabase URLs)
 
 `NEXT_PUBLIC_SUPABASE_URL` is baked into the **browser** bundle at build time and
@@ -240,6 +249,92 @@ docker compose -f docker-compose.yml -f docker-compose.dev-auth.yml up -d --buil
 This flips the app to `DEV_AUTH=1`. The bypass is **hard-disabled on Vercel**
 (`lib/auth-server.js` refuses it when `VERCEL` is set), so it can never leak into
 production.
+
+### Optional: a pretty HTTPS hostname instead of localhost ports
+
+By default the stack is served over plain HTTP at `http://localhost:3000` (app)
+and `http://localhost:8000` (auth proxy) — zero setup. If you'd rather develop
+against a single HTTPS origin that mirrors production
+(`https://minima.local.astrealabs.com`), layer on the HTTPS override.
+
+**No host setup needed — `minima.local.astrealabs.com` resolves to `127.0.0.1`
+via public DNS** (a permanent `A` record on the `astrealabs.com` zone, the same
+"loopback hostname" trick as `lvh.me` / `localtest.me`). Just bring the stack up
+with the override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+```
+
+<details>
+<summary>Offline, or DNS blocked? Add a local <code>/etc/hosts</code> entry.</summary>
+
+The public record is only a convenience — if you're offline or your resolver
+blocks it, point the hostname at loopback yourself:
+
+```bash
+echo '127.0.0.1 minima.local.astrealabs.com' | sudo tee -a /etc/hosts
+```
+
+Maintainers: the record is `minima.local  A  127.0.0.1` in Cloudflare, **DNS-only
+(not proxied)** — Cloudflare won't proxy a loopback target, and proxying would
+break TLS to the local stack anyway.
+</details>
+
+Open <https://minima.local.astrealabs.com> and **trust the self-signed cert
+once** (the browser warns because it's not signed by a public CA — expected for
+a local front door). The cert is generated in-container on first start and lives
+in a named volume (`proxy-certs`); it's never committed.
+
+What the override changes: the `proxy` also listens on `:443` and fronts the
+whole app at one origin (`/auth/v1/*` → GoTrue, everything else → the Next app),
+and the browser bundle + GoTrue's external URLs point at that origin — so the
+app is same-origin with its auth endpoint, exactly like production. The internal
+`:8000` path is unchanged (server-side code still reaches `http://proxy:8000`).
+
+**Passkeys still don't work locally** even over HTTPS — self-hosted GoTrue has no
+WebAuthn support. This override is purely for a clean URL and TLS parity; use
+email/password.
+
+### Optional: access over Tailscale (real cert, any device)
+
+If you're on [Tailscale](https://tailscale.com/), you can reach the stack from
+any device on your tailnet at a **real, browser-trusted HTTPS URL** — no public
+DNS record, no `/etc/hosts`, and **no self-signed-cert warning**. Tailscale's
+[MagicDNS](https://tailscale.com/kb/1081/magicdns) gives your machine a name and
+[`tailscale serve`](https://tailscale.com/kb/1242/tailscale-serve) fronts it with
+an auto-provisioned Let's Encrypt cert. (Enable **MagicDNS** and **HTTPS
+certificates** in the tailnet admin console first.)
+
+This reuses the HTTPS override — Tailscale terminates TLS with the trusted cert
+and proxies to the local self-signed nginx, so the self-signed cert never reaches
+a browser. `FRONTDOOR_URL` points the browser bundle and GoTrue at your node's
+name instead of the local DNS hostname.
+
+```bash
+# 1. Your node's MagicDNS name (drop the trailing dot):
+NODE=$(tailscale status --json | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
+echo "$NODE"   # e.g. my-mac.tailnet-abcd.ts.net
+
+# 2. Build + run the HTTPS override with that origin:
+FRONTDOOR_URL="https://$NODE" \
+  docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+
+# 3. Front it with a trusted Tailscale cert (proxies to the local self-signed nginx):
+tailscale serve --bg https+insecure://localhost:443
+
+# 4. Open https://$NODE from any device on your tailnet — real cert, no warning.
+```
+
+Notes:
+
+- If host port `443` needs privileges on your machine, publish nginx elsewhere
+  (`HTTPS_PORT=8443 …`) and point serve at it: `https+insecure://localhost:8443`.
+- `tailscale serve` keeps the stack **private to your tailnet**. To expose it to
+  the public internet, swap `serve` → `funnel` — but don't, while the stack still
+  uses the demo JWT secret / anon key (see the security note below).
+- **Passkeys still won't work** — a trusted cert and real origin remove the
+  browser-side blockers, but self-hosted GoTrue has no WebAuthn endpoints at all.
 
 ### ⚠️ Security: the local secrets are demo values — change them for any real deployment
 

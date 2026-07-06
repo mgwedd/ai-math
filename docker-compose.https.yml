@@ -1,0 +1,56 @@
+# OPT-IN: serve the local stack behind a pretty HTTPS hostname instead of
+# localhost:PORTs. Layer it on top of the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+#   # → https://minima.local.astrealabs.com  (trust the self-signed cert once)
+#
+# minima.local.astrealabs.com resolves to 127.0.0.1 via public DNS, so no
+# /etc/hosts edit is needed. (Offline / DNS blocked? See docs/DEPLOYMENT.md for
+# the local /etc/hosts fallback.)
+#
+# What this changes vs. the base stack:
+#  * proxy also listens on :443 with a self-signed cert (generated in-container
+#    on first start by db/proxy/docker-entrypoint-https.sh) and fronts the whole
+#    app at one origin — /auth/v1/* → GoTrue, everything else → the Next app.
+#  * the browser bundle and GoTrue's external URLs point at that origin, so the
+#    app is same-origin with its auth endpoint (matches how prod is served).
+#
+# The internal :8000 http path is unchanged — server-side code still reaches the
+# proxy at http://proxy:8000 over the compose network. Passkeys still don't work
+# locally (self-hosted GoTrue has no WebAuthn); this is purely for a clean URL
+# and TLS parity with production. See docs/DEPLOYMENT.md.
+#
+# FRONTDOOR_URL overrides the browser origin (default: the local DNS hostname).
+# Set it to front the stack behind a different origin — e.g. a Tailscale node's
+# https://<node>.ts.net — without editing this file. See docs/DEPLOYMENT.md.
+
+services:
+  auth:
+    environment:
+      # GoTrue mints confirmation/redirect links against the browser origin.
+      GOTRUE_SITE_URL: ${FRONTDOOR_URL:-https://minima.local.astrealabs.com}
+      API_EXTERNAL_URL: ${FRONTDOOR_URL:-https://minima.local.astrealabs.com}
+
+  proxy:
+    # Generate the self-signed cert (if absent), then run nginx against the
+    # HTTPS config. `-c` points nginx at the https config; the base nginx.conf
+    # bind-mount is still present but unused.
+    entrypoint: ["/docker-entrypoint-https.sh"]
+    command: ["nginx", "-c", "/etc/nginx/nginx-https.conf", "-g", "daemon off;"]
+    volumes:
+      - ./db/proxy/nginx-https.conf:/etc/nginx/nginx-https.conf:ro
+      - ./db/proxy/docker-entrypoint-https.sh:/docker-entrypoint-https.sh:ro
+      # Self-signed cert lives in a named volume — generated once, never committed.
+      - proxy-certs:/etc/nginx/certs
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+
+  app:
+    build:
+      args:
+        # Baked into the browser bundle: reach the HTTPS front door same-origin.
+        NEXT_PUBLIC_SUPABASE_URL: ${FRONTDOOR_URL:-https://minima.local.astrealabs.com}
+
+volumes:
+  # Self-signed TLS cert for the HTTPS front door — generated on first start.
+  proxy-certs:
