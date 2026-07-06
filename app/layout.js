@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Gradient Ascent — Math for AI',
-  description: 'Gamified, interactive linear algebra and calculus for engineers heading toward AI research.',
+  title: 'Minima — the math beneath machine learning',
+  description: 'Interactive linear algebra, calculus, probability, and optimization — the math behind modern AI, learned by doing.',
 };
 
 export default function RootLayout({ children }) {

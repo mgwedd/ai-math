@@ -142,12 +142,21 @@ header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px
 .btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(124,92,255,.4)}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .btn.ghost{background:var(--card2);border:1px solid rgba(255,255,255,.12)}
-/* secondary auth button (passkey sign-in) — quieter than the gradient primary */
-.btn-alt{background:var(--card2);border:1px solid rgba(255,255,255,.14);color:var(--ink);width:100%}
-.btn-alt:hover{border-color:rgba(124,92,255,.5);box-shadow:none;transform:translateY(-1px)}
-/* "or" divider between password and passkey sign-in */
-.auth-or{display:flex;align-items:center;gap:10px;margin:12px 0 10px;color:var(--muted);font-size:12px}
+/* preferred auth: passkey + Google, shown above the email fallback */
+.auth-primary{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.btn-social{background:var(--card2);border:1px solid rgba(255,255,255,.16);color:var(--ink);width:100%;
+  display:flex;align-items:center;justify-content:center;gap:10px;font-weight:700}
+.btn-social:hover{border-color:rgba(124,92,255,.55);box-shadow:none;transform:translateY(-1px)}
+.g-mark{display:inline-block;background:#fff;border-radius:3px;padding:2px;box-sizing:content-box}
+/* email is the quieter fallback below the divider */
+.btn-email{background:var(--card2);border:1px solid rgba(255,255,255,.14);color:var(--ink);width:100%}
+.btn-email:hover{border-color:rgba(124,92,255,.5);box-shadow:none;transform:translateY(-1px)}
+/* "or use your email" divider */
+.auth-or{display:flex;align-items:center;gap:10px;margin:14px 0 12px;color:var(--muted);font-size:12px}
 .auth-or::before,.auth-or::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.12)}
+/* Lattice wordmark: geometric mark + gradient word */
+.brand-mark{color:var(--accent2)}
+.brand-word{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:6px;flex-wrap:wrap}
 
 /* ===== Interactive / missions ===== */
@@ -298,7 +307,20 @@ details.deep .deep-body{padding:2px 16px 14px;font-size:13.5px;line-height:1.7;c
 .focus-item:last-of-type{border-bottom:none}
 .focus-tip{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.6}
 
-/* ===== auth gate ===== */
+/* ===== auth gate / signed-out landing ===== */
+/* Two-column landing: descriptive hero on the left, sign-in card on the right;
+   stacks on narrow screens. */
+.auth-landing{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  gap:56px;flex-wrap:wrap;padding:48px 24px;max-width:1040px;margin:0 auto;animation:fadein .3s}
+.auth-hero{flex:1 1 380px;max-width:520px}
+.auth-hero .auth-logo{font-weight:800;font-size:22px;letter-spacing:.3px;margin-bottom:24px}
+.auth-hero h1{font-size:clamp(30px,4.6vw,46px);font-weight:800;line-height:1.12;letter-spacing:-.5px}
+.auth-hero h1 span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.auth-lede{color:var(--muted);font-size:15.5px;line-height:1.65;margin-top:16px;max-width:470px}
+.auth-topics{list-style:none;margin-top:24px;display:flex;flex-direction:column;gap:11px}
+.auth-topics li{color:var(--ink);opacity:.82;font-size:14px}
+.auth-topics li b{font-weight:700;opacity:1}
+.auth-card{flex:0 1 380px;align-self:center}
 /* entrance animations must run exactly once; interacting with fields must
    never re-trigger them */
 .auth-back,.auth-back .modal{animation-iteration-count:1;animation-fill-mode:both}
