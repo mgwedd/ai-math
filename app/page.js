@@ -1,5 +1,5 @@
-import GradientAscent from '@/components/GradientAscent';
+import Minima from '@/components/Minima';
 
 export default function Home() {
-  return <GradientAscent />;
+  return <Minima />;
 }
