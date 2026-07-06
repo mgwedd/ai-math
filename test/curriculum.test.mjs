@@ -68,16 +68,31 @@ describe('the shipped curriculum is coherent', () => {
     expect(unresolved).toEqual([]);
   });
 
-  it('has a well-formed quiz on every lesson', () => {
+  it('has a well-formed quiz on every lesson (type-aware)', () => {
     const bad = [];
     for (const l of LESSONS) {
       if (!Array.isArray(l.quiz) || !l.quiz.length) { bad.push(`${l.id}: no quiz`); continue; }
       l.quiz.forEach((q, qi) => {
-        if (!Array.isArray(q.opts) || q.opts.length < 2 || !Number.isInteger(q.a) || q.a < 0 || q.a >= q.opts.length)
-          bad.push(`${l.id}[${qi}]`);
+        const type = q.type ?? 'mc';
+        if (type === 'mc') {
+          if (!Array.isArray(q.opts) || q.opts.length < 2 || !Number.isInteger(q.a) || q.a < 0 || q.a >= q.opts.length)
+            bad.push(`${l.id}[${qi}] (mc)`);
+        } else if (type === 'numeric') {
+          if (!Number.isFinite(q.answer) || !Number.isFinite(q.tol) || q.tol < 0) bad.push(`${l.id}[${qi}] (numeric)`);
+        } else if (type === 'order') {
+          if (!Array.isArray(q.steps) || q.steps.length < 2) bad.push(`${l.id}[${qi}] (order)`);
+        } else {
+          bad.push(`${l.id}[${qi}] unknown type ${type}`);
+        }
       });
     }
     expect(bad).toEqual([]);
+  });
+
+  it('ships at least one numeric and one order question as demonstrations', () => {
+    const types = LESSONS.flatMap(l => (l.quiz || []).map(q => q.type ?? 'mc'));
+    expect(types).toContain('numeric');
+    expect(types).toContain('order');
   });
 
   it('tags every lesson with a world the engine knows', () => {
@@ -122,5 +137,48 @@ describe('registerLesson — validation + idempotency', () => {
     expect(LESSONS.length).toBe(n); // no duplicate appended
     expect(LESSONS.find(l => l.id === '__smoke_dup__').title).toBe('v2');
     drop('__smoke_dup__');
+  });
+});
+
+describe('type-aware quiz-shape validation (numeric + order)', () => {
+  // registerLesson only logs on a malformed shape, so we assert on the
+  // console.error firing (bad) vs staying silent (good).
+  const withSpy = (lesson) => {
+    INTERACTIVES.__smoke_qi__ = noop;
+    const spy = vi.spyOn(console, 'error').mockImplementation(noop);
+    registerLesson({ id: '__smoke_q__', world: 'pre', title: 't', interactive: '__smoke_qi__', ...lesson });
+    const called = spy.mock.calls.length > 0;
+    spy.mockRestore();
+    drop('__smoke_q__');
+    return called;
+  };
+
+  it('accepts a valid numeric question', () => {
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, why: 'x' }] })).toBe(false);
+  });
+
+  it('rejects a numeric question missing answer / tol', () => {
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', tol: 0.5 }] })).toBe(true);
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 3 }] })).toBe(true);
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 3, tol: -1 }] })).toBe(true);
+  });
+
+  it('accepts a valid order question', () => {
+    expect(withSpy({ quiz: [{ type: 'order', q: '?', steps: ['a', 'b', 'c'] }] })).toBe(false);
+  });
+
+  it('rejects an order question with fewer than 2 steps', () => {
+    expect(withSpy({ quiz: [{ type: 'order', q: '?', steps: ['only one'] }] })).toBe(true);
+    expect(withSpy({ quiz: [{ type: 'order', q: '?' }] })).toBe(true);
+  });
+
+  it('rejects an unknown question type', () => {
+    expect(withSpy({ quiz: [{ type: 'mystery', q: '?' }] })).toBe(true);
+  });
+
+  it('still requires opts + valid a for an mc (or untyped) question', () => {
+    expect(withSpy({ quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] })).toBe(false);
+    expect(withSpy({ quiz: [{ q: '?', opts: ['a', 'b'], a: 5 }] })).toBe(true);
+    expect(withSpy({ quiz: [{ type: 'mc', q: '?', opts: ['a'], a: 0 }] })).toBe(true);
   });
 });
