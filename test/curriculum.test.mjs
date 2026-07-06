@@ -119,6 +119,97 @@ describe('the shipped curriculum is coherent', () => {
   });
 });
 
+describe('daily review queue — buildReviewQueue / interleaveByWorld', () => {
+  let buildReviewQueue, interleaveByWorld, SCORING;
+  // deterministic rng: cycles a fixed sequence so tie-breaks are reproducible
+  const seededRng = () => { let i = 0; const s = [0.1, 0.9, 0.3, 0.7, 0.5, 0.2, 0.8, 0.4, 0.6, 0.05]; return () => s[i++ % s.length]; };
+
+  beforeAll(async () => {
+    const eng = await import('../lib/engine.js');
+    ({ buildReviewQueue, interleaveByWorld, SCORING } = eng);
+  });
+
+  const lessons = [
+    { id: 'la-1', world: 'la', title: 'LA one', quiz: [{ q: '?', opts: ['a', 'b'], a: 0, tag: 'magnitude' }, { q: '?', opts: ['a', 'b'], a: 1, tag: 'direction' }] },
+    { id: 'la-2', world: 'la', title: 'LA two', quiz: [{ q: '?', opts: ['a', 'b'], a: 0, tag: 'dot product' }] },
+    { id: 'calc-1', world: 'calc', title: 'Calc one', quiz: [{ q: '?', opts: ['a', 'b'], a: 0, tag: 'chain rule' }] },
+    { id: 'prob-1', world: 'prob', title: 'Prob one', quiz: [{ q: '?', opts: ['a', 'b'], a: 0, tag: 'bayes' }] },
+    { id: 'not-done', world: 'ml', title: 'Locked', quiz: [{ q: '?', opts: ['a', 'b'], a: 0, tag: 'x' }] },
+  ];
+  const allDone = { 'la-1': true, 'la-2': true, 'calc-1': true, 'prob-1': true };
+
+  it('only draws from COMPLETED lessons', () => {
+    const q = buildReviewQueue(lessons, { done: allDone }, null, { size: 10, rng: seededRng() });
+    expect(q.map(x => x.lessonId).sort()).toEqual(['calc-1', 'la-1', 'la-2', 'prob-1']);
+    expect(q.find(x => x.lessonId === 'not-done')).toBeUndefined();
+  });
+
+  it('caps the queue at the requested size', () => {
+    const q = buildReviewQueue(lessons, { done: allDone }, null, { size: 2, rng: seededRng() });
+    expect(q.length).toBe(2);
+  });
+
+  it('prioritizes lessons with weak tags, and picks the weak-tagged question', () => {
+    const state = { done: allDone, weak: { 'la-1': ['direction'] } };
+    const q = buildReviewQueue(lessons, state, null, { size: 1, rng: seededRng() });
+    expect(q.length).toBe(1);
+    expect(q[0].lessonId).toBe('la-1');
+    expect(q[0].tag).toBe('direction'); // the weak-tagged question, not 'magnitude'
+  });
+
+  it('prioritizes low-accuracy lessons from stats when there are no weak tags', () => {
+    const stats = [
+      { lesson_id: 'calc-1', accuracy: 0.2, attempts: 5 },
+      { lesson_id: 'la-1', accuracy: 0.95, attempts: 5 },
+    ];
+    const q = buildReviewQueue(lessons, { done: allDone }, stats, { size: 1, rng: () => 0 });
+    expect(q[0].lessonId).toBe('calc-1');
+  });
+
+  it('falls back to weak-only selection when stats is null (logged-out case)', () => {
+    const state = { done: allDone, weak: { 'prob-1': ['bayes'] } };
+    const q = buildReviewQueue(lessons, state, null, { size: 1, rng: () => 0 });
+    expect(q[0].lessonId).toBe('prob-1');
+  });
+
+  it('deprioritizes recently-reviewed lessons (spacing/recency)', () => {
+    const now = Date.now();
+    // two equal-priority lessons; the stale one should rank ahead of the fresh one
+    const two = lessons.filter(l => ['calc-1', 'prob-1'].includes(l.id));
+    const state = { done: { 'calc-1': true, 'prob-1': true }, reviewLog: { 'calc-1': now, 'prob-1': now - 20 * 864e5 } };
+    const q = buildReviewQueue(two, state, null, { size: 1, now, rng: () => 0 });
+    expect(q[0].lessonId).toBe('prob-1'); // reviewed 20 days ago > reviewed just now
+  });
+
+  it('returns an empty queue when nothing is completed', () => {
+    const q = buildReviewQueue(lessons, { done: {} }, null, { size: 5, rng: seededRng() });
+    expect(q).toEqual([]);
+  });
+
+  it('interleaves worlds so consecutive items differ when possible', () => {
+    const items = [
+      { world: 'la', lessonId: 'a', qi: 0, tag: 't' },
+      { world: 'la', lessonId: 'b', qi: 0, tag: 't' },
+      { world: 'la', lessonId: 'c', qi: 0, tag: 't' },
+      { world: 'calc', lessonId: 'd', qi: 0, tag: 't' },
+      { world: 'prob', lessonId: 'e', qi: 0, tag: 't' },
+    ];
+    const out = interleaveByWorld([...items], () => 0.5);
+    expect(out.length).toBe(items.length);
+    // no two adjacent share a world unless a world genuinely dominates the tail
+    let adjacentSame = 0;
+    for (let i = 1; i < out.length; i++) if (out[i].world === out[i - 1].world) adjacentSame++;
+    // 3×la + 1 calc + 1 prob forces at most one la-la adjacency at the tail
+    expect(adjacentSame).toBeLessThanOrEqual(1);
+  });
+
+  it('exposes a review scoring knob', () => {
+    expect(SCORING.review).toBeTruthy();
+    expect(typeof SCORING.review.size).toBe('number');
+    expect(typeof SCORING.review.dailyBonus).toBe('number');
+  });
+});
+
 describe('registerLesson — validation + idempotency', () => {
   it('logs a validation error for a malformed lesson', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(noop);
