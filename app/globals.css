@@ -107,6 +107,16 @@ header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px
   background:var(--good);color:#06251c;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
 .lcard .lock{position:absolute;top:12px;right:12px;font-size:16px}
 
+/* ===== Daily review (spaced repetition) ===== */
+.review-world .world-head h2{color:#b9a8ff}
+.review-card{background:var(--card);border:1px solid rgba(124,92,255,.35);border-radius:var(--radius);
+  padding:18px 20px;box-shadow:0 8px 28px rgba(124,92,255,.10)}
+.review-card.done{border-color:rgba(45,212,160,.35)}
+.review-card .review-body p{color:var(--muted);font-size:14px;line-height:1.5;margin-bottom:14px}
+.review-card .review-body b{color:var(--ink)}
+.review-card .review-done{color:var(--ink);font-size:14px;line-height:1.5}
+.review-card .btn{margin-top:2px}
+
 /* ===== Lesson view ===== */
 .lesson-top{display:flex;align-items:center;gap:12px;padding:18px 0 6px}
 .backbtn{background:var(--card);border:1px solid rgba(255,255,255,.1);color:var(--ink);border-radius:10px;
