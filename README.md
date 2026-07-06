@@ -65,22 +65,36 @@ transformers:
 Every lesson also has a **"why this matters for AI"** sidebar and optional
 **go-deeper** cards for when you want to push further.
 
-## Run it locally
+## Get started
 
-The fastest path — app **and** database in Docker:
+The easiest way to use Minima is the **hosted version — free, no setup:**
+
+### **→ [math.astrealabs.com](https://math.astrealabs.com)**
+
+Register with a passkey, Google, or email and start learning. Your progress
+syncs to your account and follows you across devices.
+
+### Run it locally
+
+Want to hack on it? The whole stack — app **and** Postgres — runs in Docker:
 
 ```bash
 docker compose up --build
 # → http://localhost:3000
 ```
 
-Prefer hot reload? Run just the database in Docker and the app on your machine.
-Dev mode uses a local session, so you don't need to configure an auth server:
+This gives you a **fully working local instance with real persistence**: you're
+auto-signed-in as a local dev user, and your progress is saved to the Docker
+Postgres. It survives restarts (`docker compose down -v` resets it).
+
+Prefer hot reload while editing? Run just the database in Docker and the app on
+your machine (copy `.env.example` → `.env.local` first for the dev-auth vars and
+DB connection string):
 
 ```bash
 docker compose up db -d          # just Postgres
 npm install
-NEXT_PUBLIC_DEV_AUTH=1 npm run dev
+npm run dev
 ```
 
 Run the tests (curriculum coherence checks — no database needed):
@@ -88,6 +102,14 @@ Run the tests (curriculum coherence checks — no database needed):
 ```bash
 npm test
 ```
+
+> **Local auth constraint.** The local stack has **no auth server**, so the real
+> sign-in providers — **passkeys, Google, and email/password — don't work
+> locally**. Instead the app auto-signs-in as a fixed dev user (via
+> `DEV_AUTH` / `NEXT_PUBLIC_DEV_AUTH`), which is exactly what you want for
+> development: no login friction, full read/write persistence to the local
+> Postgres. To exercise the real auth providers, use the hosted app or point the
+> app at your own cloud Supabase project (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
 ## Tech stack
 
