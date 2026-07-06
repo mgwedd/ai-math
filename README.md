@@ -13,7 +13,7 @@ lab you can poke at.
 ![Supabase](https://img.shields.io/badge/Auth-Supabase-3ecf8e)
 ![Postgres](https://img.shields.io/badge/DB-Postgres-336791)
 
-**[▶ Try it live](https://minima.astrealabs.com)**  ·  [Architecture](docs/ARCHITECTURE.md)  ·  [Deployment](docs/DEPLOYMENT.md)
+**[https://minima.astrealabs.com](https://minima.astrealabs.com)**  ·  [Architecture](docs/ARCHITECTURE.md)  ·  [Deployment](docs/DEPLOYMENT.md)
 
 </div>
 
