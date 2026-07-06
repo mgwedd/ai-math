@@ -6,6 +6,7 @@
    interactive keys, malformed quizzes, misaligned inline feedback, duplicate
    ids — before they ship. */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
+import katex from 'katex';
 
 // --- browser-global stubs: must exist BEFORE the curriculum imports. This is
 //     insurance against a stray top-level DOM reference sneaking in. ---
@@ -342,6 +343,93 @@ describe('daily review queue — buildReviewQueue / interleaveByWorld', () => {
     expect(SCORING.review).toBeTruthy();
     expect(typeof SCORING.review.size).toBe('number');
     expect(typeof SCORING.review.dailyBonus).toBe('number');
+  });
+});
+
+describe('display formulas render as valid KaTeX (math accuracy regression guard)', () => {
+  // Lesson authors write display math as <div class="formula">$$...$$</div>;
+  // lib/content-render.js renders it with KaTeX at view time. Catches two
+  // classes of authoring mistake before they ship: (a) a formula body that
+  // isn't wrapped in $$...$$ delimiters, so KaTeX never touches it and it
+  // renders as literal dollar-sign-wrapped text; (b) invalid LaTeX inside the
+  // delimiters (most commonly an unescaped backslash in the JS source —
+  // writing \nabla instead of \\nabla turns into a newline + "abla").
+  const FORMULA_RE = /<div class="formula">([\s\S]*?)<\/div>/g;
+
+  // A handful of .formula blocks are multi-line diagrams or prose (flowcharts,
+  // side-by-side comparison tables) rather than a single equation — KaTeX adds
+  // nothing there, so they intentionally stay plain HTML. Keep this list in
+  // sync with lib/curriculum/*.js; anything not on it must be $$...$$-wrapped.
+  const INTENTIONALLY_PLAIN = new Set([
+    'la-matrix (learn)',   // 2-line <br> layout: matrix + per-column prose annotations
+    'c-optim (learn)',     // 2-line <br> layout: full prose sentences, not equations
+    'pre-functions (learn)', // labeled input/output flow diagram, not an equation
+    'ml-learning (learn)', // pure English sentence, no math symbols
+    'ml-gpt (learn)',      // labeled pipeline diagram (predict → sample → …)
+    'ml-boss (learn)',     // labeled pipeline diagram (tokenize → embed → …)
+  ]);
+  // la-posdef also carries a converted formula in `learn`, so its two plain
+  // blocks (a PD/ND/Indefinite/PSD criteria table and its BOWL/DOME/SADDLE/
+  // TROUGH geometry counterpart) are matched by content, not position.
+  const LA_POSDEF_PLAIN_MARKERS = ['Positive definite (PD)', 'paraboloid BOWL'];
+
+  function formulasIn(html) {
+    const out = [];
+    if (!html || typeof html !== 'string') return out;
+    let m;
+    FORMULA_RE.lastIndex = 0;
+    while ((m = FORMULA_RE.exec(html))) out.push(m[1]);
+    return out;
+  }
+
+  function allFormulas() {
+    const found = [];
+    for (const l of LESSONS) {
+      formulasIn(l.learn).forEach((f) => found.push({ id: l.id, where: 'learn', f }));
+      formulasIn(l.ml).forEach((f) => found.push({ id: l.id, where: 'ml', f }));
+      (l.deeper || []).forEach((d, i) => formulasIn(d.body).forEach((f) => found.push({ id: l.id, where: `deeper[${i}]`, f })));
+      (l.labs || []).forEach((lab, i) => formulasIn(lab.intro).forEach((f) => found.push({ id: l.id, where: `labs[${i}].intro`, f })));
+    }
+    return found;
+  }
+
+  // Filters out the intentionally-plain blocks above (by key, or by content
+  // marker for la-posdef, which also has a real converted formula in `learn`).
+  function convertibleFormulas() {
+    return allFormulas().filter(({ id, where, f }) => {
+      const key = `${id} (${where})`;
+      if (INTENTIONALLY_PLAIN.has(key)) return false;
+      if (key === 'la-posdef (learn)' && LA_POSDEF_PLAIN_MARKERS.some((m) => f.includes(m))) return false;
+      return true;
+    });
+  }
+
+  it('ships at least one .formula block (regression guard: not silently emptied)', () => {
+    expect(allFormulas().length).toBeGreaterThan(0);
+  });
+
+  it('every non-diagram .formula block is wrapped in $$...$$ display delimiters', () => {
+    const bad = convertibleFormulas().filter(({ f }) => !/^\$\$[\s\S]*\$\$$/.test(f));
+    expect(bad.map(({ id, where, f }) => `${id} (${where}): ${f.slice(0, 60)}`)).toEqual([]);
+  });
+
+  it('every .formula block parses as valid KaTeX with no stray control characters', () => {
+    const bad = [];
+    for (const { id, where, f } of allFormulas()) {
+      const m = f.match(/^\$\$([\s\S]*)\$\$$/);
+      if (!m) continue; // already reported by the delimiter test above
+      const tex = m[1];
+      if (/[\x00-\x09\x0b\x0c\x0e-\x1f]/.test(tex)) {
+        bad.push(`${id} (${where}): stray control character — check for an unescaped backslash (\\n instead of \\\\n) in the JS source`);
+        continue;
+      }
+      try {
+        katex.renderToString(tex, { throwOnError: true, displayMode: true });
+      } catch (e) {
+        bad.push(`${id} (${where}): ${e.message} — formula: ${tex}`);
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });
 
