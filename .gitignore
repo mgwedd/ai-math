@@ -6,3 +6,6 @@ out/
 .DS_Store
 .vercel
 .env*
+
+# local self-host: optional host bind-mount for Postgres data (docs/DEPLOYMENT.md)
+.pgdata/
