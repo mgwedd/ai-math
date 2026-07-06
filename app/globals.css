@@ -209,6 +209,31 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
 @keyframes expand{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .quiz-prog{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:10px}
 
+/* ===== Numeric-input question ===== */
+.num-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.num-in{background:var(--bg2);border:1.5px solid rgba(255,255,255,.1);color:var(--ink);border-radius:11px;
+  padding:12px 14px;font-size:15px;font-family:var(--mono);width:170px;transition:all .15s}
+.num-in:focus{outline:none;border-color:var(--accent)}
+.num-in.correct{border-color:var(--good);background:rgba(45,212,160,.12)}
+.num-in.wrong{border-color:var(--bad);background:rgba(255,92,122,.1);animation:shake .35s}
+.num-in:disabled{cursor:default}
+.num-unit{font-family:var(--mono);color:var(--accent2);font-size:14px;font-weight:700}
+
+/* ===== Derivation-ordering question ===== */
+.order-list{display:flex;flex-direction:column;gap:8px}
+.order-list.correct .order-item{border-color:var(--good);background:rgba(45,212,160,.1)}
+.order-item{display:flex;align-items:center;gap:11px;background:var(--bg2);
+  border:1.5px solid rgba(255,255,255,.1);border-radius:11px;padding:11px 13px;transition:all .15s}
+.order-num{flex:0 0 auto;width:24px;height:24px;border-radius:7px;background:var(--card2);
+  color:var(--accent2);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+.order-text{flex:1 1 auto;font-size:14px;line-height:1.45;color:var(--ink)}
+.order-ctrls{flex:0 0 auto;display:flex;flex-direction:column;gap:3px}
+.order-btn{background:var(--card2);border:1px solid rgba(255,255,255,.12);color:var(--ink);
+  border-radius:6px;width:26px;height:18px;font-size:10px;cursor:pointer;line-height:1;
+  display:flex;align-items:center;justify-content:center;font-family:var(--font);transition:all .12s}
+.order-btn:hover:not(:disabled){border-color:var(--accent);background:var(--accent)}
+.order-btn:disabled{opacity:.3;cursor:default}
+
 /* ===== Multi-lab sub-stepper ===== */
 .lab-prog{font-size:12px;color:var(--accent2);font-weight:800;letter-spacing:.5px;margin-bottom:8px}
 .lab-dots{display:flex;gap:6px;margin-bottom:14px}
