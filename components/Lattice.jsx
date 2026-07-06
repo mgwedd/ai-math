@@ -132,13 +132,29 @@ function AuthGate() {
   }
 
   return (
-    <div className={'modal-back auth-back' + (settled ? ' settled' : '')}>
-      <form className="modal" onSubmit={submit}>
-        <h2><span className="brand-mark">◈</span> <span className="brand-word">Lattice</span></h2>
+    <div className={'auth-landing auth-back' + (settled ? ' settled' : '')}>
+      <section className="auth-hero">
+        <div className="auth-logo"><span className="brand-mark">◈</span> <span className="brand-word">Lattice</span></div>
+        <h1>The <span>structure</span> beneath machine learning</h1>
+        <p className="auth-lede">
+          Work through the linear algebra, calculus, probability, and optimization
+          that modern AI is built on — one hands-on lesson at a time. Every idea is
+          an interactive lab you can poke at, not a wall of formulas.
+        </p>
+        <ul className="auth-topics">
+          <li>🌌 <b>Linear algebra</b> — vectors, matrices, projections, SVD</li>
+          <li>🌋 <b>Calculus</b> — gradients, convexity, optimization</li>
+          <li>🎲 <b>Probability &amp; statistics</b> — distributions, inference, Bayes</li>
+          <li>🤖 <b>Machine learning</b> — regression, trees, neural nets</li>
+        </ul>
+      </section>
+
+      <form className="modal auth-card" onSubmit={submit}>
+        <h2>{mode === 'signin' ? 'Sign in' : 'Create your account'}</h2>
         <p>
           {mode === 'signin'
-            ? 'Welcome back — your lessons and progress are saved to your account.'
-            : 'Create an account to start learning the math behind AI.'}
+            ? 'Continue where you left off — your progress is saved to your account.'
+            : 'Save your XP, lessons, and quiz history across devices.'}
         </p>
 
         {/* Preferred: passkey (returning) then Google. Email is the fallback. */}
