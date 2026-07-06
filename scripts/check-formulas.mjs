@@ -65,5 +65,53 @@ for (const { id, where, f } of found) {
   }
 }
 
-console.log(`Checked ${found.length} formula(s)${scope.size ? ` (scoped to ${[...scope].join(', ')})` : ''}, ${errors} error(s).`);
+// Inline math: \(...\) can appear anywhere in learn/ml/deeper/labs text, not
+// just inside a .formula div. Validate every one found, and separately flag
+// any <code>...</code> span that still contains raw unicode math notation
+// (a sign it hasn't been converted to \(...\) yet) — a heuristic hint, not
+// a hard error, since a handful of plain identifiers are fine to leave as-is.
+const INLINE_RE = /\\\(([\s\S]*?)\\\)/g;
+const CODE_RE = /<code>([^<]*)<\/code>/g;
+const MATH_HINT_RE = /[·‖ᵀ√Σ∏∈∞±≥≤≠≈λμσθδΔρη→←↦⟂⊥×∫∂∇]|<su[bp]>/;
+
+let inlineChecked = 0;
+let unconvertedHints = 0;
+for (const l of LESSONS) {
+  if (scope.size && !scope.has(l.id)) continue;
+  const fields = [
+    ['learn', l.learn], ['ml', l.ml],
+    ...(l.deeper || []).map((d, i) => [`deeper[${i}]`, d.body]),
+    ...(l.labs || []).map((lab, i) => [`labs[${i}].intro`, lab.intro]),
+  ];
+  for (const [where, html] of fields) {
+    if (!html || typeof html !== 'string') continue;
+    let m;
+    INLINE_RE.lastIndex = 0;
+    while ((m = INLINE_RE.exec(html))) {
+      inlineChecked++;
+      const tex = m[1];
+      if (/[\x00-\x09\x0b\x0c\x0e-\x1f]/.test(tex)) {
+        errors++;
+        console.error(`[control-char-inline] ${l.id} (${where}): stray control char → ${JSON.stringify(tex).slice(0, 120)}`);
+        continue;
+      }
+      try {
+        katex.renderToString(tex, { throwOnError: true, displayMode: false });
+      } catch (e) {
+        errors++;
+        console.error(`[katex-inline] ${l.id} (${where}): ${e.message}\n  formula: ${tex}`);
+      }
+    }
+    CODE_RE.lastIndex = 0;
+    let cm;
+    while ((cm = CODE_RE.exec(html))) {
+      if (MATH_HINT_RE.test(cm[1])) {
+        unconvertedHints++;
+        console.error(`[unconverted-hint] ${l.id} (${where}): <code> still has raw math notation → ${cm[1].slice(0, 60)}`);
+      }
+    }
+  }
+}
+
+console.log(`Checked ${found.length} formula(s), ${inlineChecked} inline \\(...\\) span(s)${scope.size ? ` (scoped to ${[...scope].join(', ')})` : ''}, ${errors} error(s), ${unconvertedHints} unconverted <code> hint(s).`);
 process.exit(errors ? 1 : 0);

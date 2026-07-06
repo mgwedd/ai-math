@@ -361,8 +361,6 @@ describe('display formulas render as valid KaTeX (math accuracy regression guard
   // nothing there, so they intentionally stay plain HTML. Keep this list in
   // sync with lib/curriculum/*.js; anything not on it must be $$...$$-wrapped.
   const INTENTIONALLY_PLAIN = new Set([
-    'la-matrix (learn)',   // 2-line <br> layout: matrix + per-column prose annotations
-    'c-optim (learn)',     // 2-line <br> layout: full prose sentences, not equations
     'pre-functions (learn)', // labeled input/output flow diagram, not an equation
     'ml-learning (learn)', // pure English sentence, no math symbols
     'ml-gpt (learn)',      // labeled pipeline diagram (predict → sample → …)
@@ -427,6 +425,69 @@ describe('display formulas render as valid KaTeX (math accuracy regression guard
         katex.renderToString(tex, { throwOnError: true, displayMode: true });
       } catch (e) {
         bad.push(`${id} (${where}): ${e.message} — formula: ${tex}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  // Inline math: authors write \(...\) directly in prose and quiz text (not
+  // just inside .formula divs). Collect every text field a lesson can carry,
+  // including quiz q/opts/why/wrong, since that's where most inline math ends
+  // up (answer choices, explanations).
+  function allTextFields() {
+    const fields = [];
+    for (const l of LESSONS) {
+      fields.push([`${l.id} (learn)`, l.learn], [`${l.id} (ml)`, l.ml]);
+      (l.deeper || []).forEach((d, i) => fields.push([`${l.id} (deeper[${i}])`, d.body]));
+      (l.labs || []).forEach((lab, i) => fields.push([`${l.id} (labs[${i}].intro)`, lab.intro]));
+      (l.quiz || []).forEach((q, qi) => {
+        fields.push([`${l.id} (quiz[${qi}].q)`, q.q], [`${l.id} (quiz[${qi}].why)`, q.why]);
+        (q.opts || []).forEach((o, oi) => fields.push([`${l.id} (quiz[${qi}].opts[${oi}])`, o]));
+        if (q.wrong) Object.entries(q.wrong).forEach(([oi, w]) => fields.push([`${l.id} (quiz[${qi}].wrong[${oi}])`, w]));
+      });
+    }
+    return fields;
+  }
+
+  const INLINE_RE = /\\\(([\s\S]*?)\\\)/g;
+  const CODE_RE = /<code>([^<]*)<\/code>/g;
+  // Presence of any of these inside a <code> span (untouched by \(...\)) is a
+  // strong sign it's still raw Unicode notation rather than converted KaTeX.
+  const MATH_HINT_RE = /[·‖ᵀ√Σ∏∈∞±≥≤≠≈λμσθδΔρη→←↦⟂⊥×∫∂∇]|<su[bp]>/;
+  // Genuine code/API identifiers that are correctly left as plain <code>, not math.
+  const CODE_NOT_MATH = new Set(['+=', 'for', 'ddof', 'var', 'nn.CrossEntropyLoss', 'sparse_categorical_crossentropy', 'numpy.linalg.lstsq']);
+
+  it('every inline \\(...\\) span parses as valid KaTeX with no stray control characters', () => {
+    const bad = [];
+    for (const [where, html] of allTextFields()) {
+      if (!html || typeof html !== 'string') continue;
+      let m;
+      INLINE_RE.lastIndex = 0;
+      while ((m = INLINE_RE.exec(html))) {
+        const tex = m[1];
+        if (/[\x00-\x09\x0b\x0c\x0e-\x1f]/.test(tex)) {
+          bad.push(`${where}: stray control character — check for an unescaped backslash (\\n instead of \\\\n) in the JS source`);
+          continue;
+        }
+        try {
+          katex.renderToString(tex, { throwOnError: true, displayMode: false });
+        } catch (e) {
+          bad.push(`${where}: ${e.message} — inline math: ${tex}`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('no <code> span still carries raw Unicode math notation (should be \\(...\\) KaTeX)', () => {
+    const bad = [];
+    for (const [where, html] of allTextFields()) {
+      if (!html || typeof html !== 'string') continue;
+      let m;
+      CODE_RE.lastIndex = 0;
+      while ((m = CODE_RE.exec(html))) {
+        if (CODE_NOT_MATH.has(m[1])) continue;
+        if (MATH_HINT_RE.test(m[1])) bad.push(`${where}: <code>${m[1].slice(0, 60)}</code>`);
       }
     }
     expect(bad).toEqual([]);
