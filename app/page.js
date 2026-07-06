@@ -1,5 +1,5 @@
-import Lattice from '@/components/Lattice';
+import Minima from '@/components/Minima';
 
 export default function Home() {
-  return <Lattice />;
+  return <Minima />;
 }

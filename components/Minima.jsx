@@ -78,7 +78,7 @@ function AuthGate() {
           setMsg({ kind: 'info', text: 'Account created — check your email for the confirmation link, then sign in.' });
         }
         // if confirmations are disabled, a session exists and the
-        // auth listener in Lattice flips straight into the game
+        // auth listener in Minima flips straight into the game
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -91,7 +91,7 @@ function AuthGate() {
 
   // Passkey (WebAuthn) sign-in: no email/password needed. Supabase runs the
   // full ceremony (navigator.credentials.get) and creates the session, after
-  // which the auth listener in Lattice drops the user into the game.
+  // which the auth listener in Minima drops the user into the game.
   async function passkeySignIn() {
     const supabase = getSupabase();
     if (!supabase) {
@@ -198,7 +198,7 @@ function AuthGate() {
       </form>
 
       <section className="auth-hero">
-        <div className="auth-logo"><span className="brand-mark">◈</span> <span className="brand-word">Lattice</span></div>
+        <div className="auth-logo"><span className="brand-mark">◈</span> <span className="brand-word">Minima</span></div>
         <h1>The <span>math foundations</span> beneath machine learning</h1>
         <p className="auth-lede">
           Work through the linear algebra, calculus, probability, and optimization
@@ -231,7 +231,7 @@ function GoogleMark() {
 const DEV_MODE = process.env.NEXT_PUBLIC_DEV_AUTH === '1';
 const DEV_SESSION = { user: { id: '00000000-0000-4000-8000-000000001337', email: 'dev@astrealabs.com' } };
 
-export default function Lattice() {
+export default function Minima() {
   const [session, setSession] = useState(undefined); // undefined = loading
 
   useEffect(() => {
@@ -309,7 +309,7 @@ export default function Lattice() {
       <div id="app">
         <header>
           <div className="logo" onClick={() => window.go && window.go('home')}>
-            <span className="brand-mark">◈</span> <span>Lattice</span>
+            <span className="brand-mark">◈</span> <span>Minima</span>
           </div>
           <div className="hud">
             <div className="xpbar-wrap">
@@ -328,7 +328,7 @@ export default function Lattice() {
           </div>
         </header>
         <main id="view"></main>
-        <footer>Lattice · Learn the math behind AI by doing · progress syncs to your account</footer>
+        <footer>Minima · Learn the math behind AI by doing · progress syncs to your account</footer>
       </div>
       <div id="toasts"></div>
       <canvas id="fx"></canvas>
