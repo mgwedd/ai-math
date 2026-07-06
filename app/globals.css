@@ -103,6 +103,11 @@ header{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:14px
 .lcard.locked{opacity:.45;cursor:not-allowed;filter:saturate(.4)}
 .lcard.locked:hover{transform:none;border-color:rgba(255,255,255,.07);box-shadow:none}
 .lcard.done-card{border-color:rgba(45,212,160,.35)}
+/* boss "qualifying exam" card — gold accent, spans the full grid row */
+.lcard.exam-card{grid-column:1/-1;background:linear-gradient(135deg,rgba(255,201,77,.07),var(--card));
+  border-color:rgba(255,201,77,.32)}
+.lcard.exam-card:not(.locked):hover{border-color:rgba(255,201,77,.6)}
+.lcard.exam-card .lemoji{font-size:30px}
 .lcard .check{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:50%;
   background:var(--good);color:#06251c;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
 .lcard .lock{position:absolute;top:12px;right:12px;font-size:16px}
