@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server';
-import { pool, readJson } from '@/lib/db';
+import { pool, readJson, logRouteError } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth-server';
 
 export async function GET() {
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const r = await pool.query(
-    'SELECT state, xp, updated_at FROM progress WHERE user_id = $1',
-    [user.id]
-  );
-  if (!r.rows.length) return NextResponse.json({ error: 'no state' }, { status: 404 });
-  return NextResponse.json(r.rows[0]);
+  try {
+    const r = await pool.query(
+      'SELECT state, xp, updated_at FROM progress WHERE user_id = $1',
+      [user.id]
+    );
+    if (!r.rows.length) return NextResponse.json({ error: 'no state' }, { status: 404 });
+    return NextResponse.json(r.rows[0]);
+  } catch (e) {
+    const code = logRouteError('/api/state', 'GET', user.id, e);
+    return NextResponse.json({ error: 'internal error', code }, { status: 500 });
+  }
 }
 
 export async function PUT(req) {
@@ -26,8 +31,12 @@ export async function PUT(req) {
   const xp = Number.isFinite(+state.xp)
     ? Math.min(10_000_000, Math.max(0, Math.floor(+state.xp))) : 0;
 
-  const client = await pool.connect();
+  let client;
   try {
+    // pool.connect() itself throws when the DB is unreachable (bad pooler URL,
+    // SSL failure, wrong credentials) — the common prod-500 cause — so it must
+    // be inside the try, or the error escapes unlogged.
+    client = await pool.connect();
     await client.query('BEGIN');
     const prev = await client.query(
       'SELECT xp FROM progress WHERE user_id = $1 FOR UPDATE', [user.id]);
@@ -49,10 +58,10 @@ export async function PUT(req) {
     await client.query('COMMIT');
     return NextResponse.json({ ok: true, updated_at: r.rows[0].updated_at });
   } catch (e) {
-    await client.query('ROLLBACK');
-    console.error(e);
-    return NextResponse.json({ error: 'internal error' }, { status: 500 });
+    if (client) { try { await client.query('ROLLBACK'); } catch { /* connection already dead */ } }
+    const code = logRouteError('/api/state', 'PUT', user.id, e);
+    return NextResponse.json({ error: 'internal error', code }, { status: 500 });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }

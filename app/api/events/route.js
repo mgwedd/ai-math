@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { pool, readJson } from '@/lib/db';
+import { pool, readJson, logRouteError } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth-server';
 
 export async function POST(req) {
@@ -13,8 +13,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'body must be {events:[...]} (≤200)' }, { status: 400 });
   }
 
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     let stored = 0;
     for (const ev of events) {
@@ -38,10 +39,10 @@ export async function POST(req) {
     await client.query('COMMIT');
     return NextResponse.json({ ok: true, stored });
   } catch (e) {
-    await client.query('ROLLBACK');
-    console.error(e);
-    return NextResponse.json({ error: 'internal error' }, { status: 500 });
+    if (client) { try { await client.query('ROLLBACK'); } catch { /* connection already dead */ } }
+    const code = logRouteError('/api/events', 'POST', user.id, e);
+    return NextResponse.json({ error: 'internal error', code }, { status: 500 });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
