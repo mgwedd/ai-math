@@ -199,7 +199,7 @@ function AuthGate() {
 
       <section className="auth-hero">
         <div className="auth-logo"><span className="brand-mark">◈</span> <span className="brand-word">Minima</span></div>
-        <h1>The <span>math foundations</span> beneath machine learning</h1>
+        <h1>Master <span>AI Math Foundations</span></h1>
         <p className="auth-lede">
           Work through the linear algebra, calculus, probability, and optimization
           that modern AI is built on — one hands-on lesson at a time. Every idea is
