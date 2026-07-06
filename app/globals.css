@@ -246,6 +246,34 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
 .lab-intro b,.lab-intro strong{color:var(--ink)}
 .lab-intro code{font-family:var(--mono);background:var(--card2);padding:2px 6px;border-radius:5px;font-size:.9em;color:#aee8ff}
 
+/* ===== Predict-then-verify gate ===== */
+.predict{background:var(--bg2);border:1px solid rgba(124,92,255,.35);border-left:3px solid var(--accent);
+  border-radius:12px;padding:14px 16px;margin-bottom:16px;animation:expand .3s ease-out}
+.predict.committed{border-color:rgba(255,255,255,.12);border-left-color:var(--gold)}
+.predict-head{font-size:12px;letter-spacing:.6px;color:var(--accent);font-weight:800;display:flex;
+  flex-wrap:wrap;gap:8px;align-items:baseline;margin-bottom:10px}
+.predict-xp{margin-left:auto;font-size:11px;font-weight:800;color:var(--gold);white-space:nowrap}
+.predict-prompt{font-size:14.5px;font-weight:700;line-height:1.55;color:var(--ink);margin-bottom:12px}
+.predict-opts{display:flex;flex-direction:column;gap:8px}
+.predict-opt{text-align:left;background:var(--card2);border:1.5px solid rgba(255,255,255,.12);color:var(--ink);
+  border-radius:10px;padding:11px 14px;font-size:14px;cursor:pointer;font-family:var(--font);transition:all .15s;line-height:1.45}
+.predict-opt:hover{border-color:var(--accent);background:rgba(124,92,255,.14)}
+.predict-input{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.predict-input input{flex:1;min-width:120px;background:var(--card2);border:1.5px solid rgba(255,255,255,.12);
+  color:var(--ink);border-radius:10px;padding:11px 14px;font-size:14px;font-family:var(--mono)}
+.predict-input input:focus{outline:none;border-color:var(--accent)}
+.predict-unit{color:var(--muted);font-family:var(--mono);font-size:13px}
+.predict-recall{font-size:13.5px;color:var(--muted)}.predict-recall b{color:var(--ink)}
+.predict-reveal{display:none}
+.predict-reveal.shown{display:block;margin-top:11px;padding-top:11px;border-top:1px dashed rgba(255,255,255,.14);
+  font-size:13.5px;line-height:1.6;color:#cdd4f0;animation:expand .3s ease-out}
+.predict-mark{font-weight:800}
+.predict-mark.hit{color:var(--good)}
+.predict-mark.miss{color:var(--gold)}
+/* while locked, the interactive is visible but inert — you can look, not sweep */
+.lab.lab-locked .canvas-wrap{opacity:.75}
+.lab.lab-locked .controls{opacity:.45;pointer-events:none;filter:grayscale(.3)}
+
 /* ===== Complete screen ===== */
 .complete{text-align:center;padding:46px 20px}
 .complete .big{font-size:60px;animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
