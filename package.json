@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
-    "@supabase/supabase-js": "^2.108.1",
+    "@supabase/supabase-js": "^2.110.0",
     "next": "^15.3.3",
-    "pg": "^8.13.1",
+    "pg": "^8.22.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
