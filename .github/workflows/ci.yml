@@ -8,6 +8,8 @@ name: CI
 #                       catches compile/render breakage the data-layer tests
 #                       can't (SWC catches what node --check won't).
 #   conflict-markers  — fails if unresolved merge-conflict markers slip in.
+#   actionlint        — lints the workflow files themselves.
+#   dependency-review — (PRs only) blocks pulls that add vulnerable deps.
 on:
   push:
     branches: [main]
@@ -66,3 +68,26 @@ jobs:
             exit 1
           fi
           echo "No conflict markers."
+
+  actionlint:
+    name: lint workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        # Official download script from rhysd/actionlint; lints every workflow
+        # in .github/workflows for syntax, expression, and shell (shellcheck) errors.
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+  dependency-review:
+    name: dependency review
+    runs-on: ubuntu-latest
+    # Compares the PR's dependency changes against advisories; PR-only by design.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
