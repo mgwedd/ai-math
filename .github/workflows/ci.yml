@@ -1,8 +1,13 @@
 name: CI
 
-# Runs the Vitest curriculum smoke suite on every push to main and every PR —
-# the same `npm test` the local pre-push hook runs, so CI is the backstop when
-# someone pushes with --no-verify or hasn't enabled the hook.
+# Gates every push to main and every PR on three cheap, independent checks:
+#   test              — the Vitest curriculum smoke suite (same `npm test` the
+#                       local pre-push hook runs; CI is the backstop when someone
+#                       pushes with --no-verify or hasn't enabled the hook).
+#   build             — `next build`, which runs SWC over the whole app and
+#                       catches compile/render breakage the data-layer tests
+#                       can't (SWC catches what node --check won't).
+#   conflict-markers  — fails if unresolved merge-conflict markers slip in.
 on:
   push:
     branches: [main]
@@ -12,6 +17,10 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+# Least privilege: these jobs only read the repo.
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -29,3 +38,31 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  build:
+    name: build (next)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # No secrets needed: lib/db.js falls back to a localhost DSN and the
+      # Supabase client is constructed lazily (returns null on missing env), so
+      # the build never touches a real service.
+      - run: npm run build
+
+  conflict-markers:
+    name: no merge-conflict markers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on unresolved conflict markers
+        run: |
+          if git grep -nE '^(<{7}|>{7})( |$)|^={7}$' -- ':!.github/workflows/ci.yml'; then
+            echo "::error::Unresolved merge-conflict markers found — resolve them before merging."
+            exit 1
+          fi
+          echo "No conflict markers."
