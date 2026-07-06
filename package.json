@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "push-vercel-registry": "docker push --all-tags vcr.vercel.com/astrea-software/ai-math/astrea-labs",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
