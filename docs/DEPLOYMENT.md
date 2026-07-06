@@ -257,17 +257,29 @@ and `http://localhost:8000` (auth proxy) — zero setup. If you'd rather develop
 against a single HTTPS origin that mirrors production
 (`https://minima.local.astrealabs.com`), layer on the HTTPS override.
 
-One-time host setup — point the hostname at your loopback:
+**No host setup needed — `minima.local.astrealabs.com` resolves to `127.0.0.1`
+via public DNS** (a permanent `A` record on the `astrealabs.com` zone, the same
+"loopback hostname" trick as `lvh.me` / `localtest.me`). Just bring the stack up
+with the override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+```
+
+<details>
+<summary>Offline, or DNS blocked? Add a local <code>/etc/hosts</code> entry.</summary>
+
+The public record is only a convenience — if you're offline or your resolver
+blocks it, point the hostname at loopback yourself:
 
 ```bash
 echo '127.0.0.1 minima.local.astrealabs.com' | sudo tee -a /etc/hosts
 ```
 
-Then bring the stack up with the override:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
-```
+Maintainers: the record is `minima.local  A  127.0.0.1` in Cloudflare, **DNS-only
+(not proxied)** — Cloudflare won't proxy a loopback target, and proxying would
+break TLS to the local stack anyway.
+</details>
 
 Open <https://minima.local.astrealabs.com> and **trust the self-signed cert
 once** (the browser warns because it's not signed by a public CA — expected for

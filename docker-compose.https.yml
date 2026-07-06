@@ -1,11 +1,12 @@
 # OPT-IN: serve the local stack behind a pretty HTTPS hostname instead of
 # localhost:PORTs. Layer it on top of the base compose file:
 #
-#   # one-time host setup:
-#   echo '127.0.0.1 minima.local.astrealabs.com' | sudo tee -a /etc/hosts
-#
 #   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
 #   # → https://minima.local.astrealabs.com  (trust the self-signed cert once)
+#
+# minima.local.astrealabs.com resolves to 127.0.0.1 via public DNS, so no
+# /etc/hosts edit is needed. (Offline / DNS blocked? See docs/DEPLOYMENT.md for
+# the local /etc/hosts fallback.)
 #
 # What this changes vs. the base stack:
 #  * proxy also listens on :443 with a self-signed cert (generated in-container
