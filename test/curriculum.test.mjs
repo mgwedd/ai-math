@@ -119,6 +119,141 @@ describe('the shipped curriculum is coherent', () => {
   });
 });
 
+describe('cumulative qualifying-exam pool + retake nudges (P0 #7)', () => {
+  let engine, SCORING;
+  beforeAll(async () => {
+    engine = await import('../lib/engine.js'); // no top-level DOM exec → safe under stubs
+    SCORING = engine.SCORING;
+  });
+
+  it('exposes an exam scoring knob with sane bounds', () => {
+    expect(SCORING.exam).toBeTruthy();
+    expect(SCORING.exam.draw).toBeGreaterThanOrEqual(1);
+    expect(SCORING.exam.passPct).toBeGreaterThan(0);
+    expect(SCORING.exam.passPct).toBeLessThanOrEqual(1);
+    expect(SCORING.exam.pass).toBeGreaterThan(0);
+  });
+
+  it('draws the exam pool CUMULATIVELY from this world and all prior worlds', () => {
+    const { examPoolFor, WORLD_ORDER, worldLessons } = engine;
+    let prevLen = -1;
+    for (const w of WORLD_ORDER) {
+      const pool = examPoolFor(w, WORLD_ORDER, worldLessons);
+      for (const r of pool) {                       // every ref resolves to a real question
+        const l = LESSONS.find(x => x.id === r.lessonId);
+        expect(l).toBeTruthy();
+        expect(l.quiz[r.qi]).toBeTruthy();
+      }
+      expect(pool.length).toBeGreaterThanOrEqual(prevLen); // cumulative → monotonically grows
+      prevLen = pool.length;
+    }
+  });
+
+  it('the LAST world pool includes questions from the FIRST world', () => {
+    const { examPoolFor, WORLD_ORDER, worldLessons } = engine;
+    const first = WORLD_ORDER[0], last = WORLD_ORDER[WORLD_ORDER.length - 1];
+    const firstIds = new Set(worldLessons(first).map(l => l.id));
+    const lastPool = examPoolFor(last, WORLD_ORDER, worldLessons);
+    expect(lastPool.some(r => firstIds.has(r.lessonId))).toBe(true);
+  });
+
+  it('an unknown world yields an empty pool', () => {
+    const { examPoolFor, WORLD_ORDER, worldLessons } = engine;
+    expect(examPoolFor('does-not-exist', WORLD_ORDER, worldLessons)).toEqual([]);
+  });
+
+  it('examNudge escalates day → week → month; null before/without a pass', () => {
+    const { examNudge } = engine;
+    const now = 1_000_000_000_000;
+    const DAY = 24 * 60 * 60 * 1000;
+    expect(examNudge(null, now)).toBeNull();          // never passed
+    expect(examNudge(now, now)).toBeNull();           // just passed
+    expect(examNudge(now, now + DAY - 1)).toBeNull(); // not quite a day
+    expect(examNudge(now, now + DAY).key).toBe('day');
+    expect(examNudge(now, now + 7 * DAY).key).toBe('week');
+    expect(examNudge(now, now + 45 * DAY).key).toBe('month'); // strongest due tier wins
+  });
+});
+
+describe('predict-then-verify primitive', () => {
+  let gradePrediction, SCORING;
+  beforeAll(async () => {
+    ({ gradePrediction, SCORING } = await import('../lib/engine.js'));
+  });
+
+  it('exposes a SCORING.predict economy knob (no XP hardcoded in the engine)', () => {
+    expect(SCORING.predict).toBeTruthy();
+    expect(typeof SCORING.predict.commit).toBe('number');
+    expect(typeof SCORING.predict.hit).toBe('number');
+  });
+
+  it('grades multiple-choice predictions by index', () => {
+    const def = { choices: ['a', 'b', 'c'], answer: 1 };
+    expect(gradePrediction(def, 1)).toEqual({ value: 1, correct: true });
+    expect(gradePrediction(def, 0)).toEqual({ value: 0, correct: false });
+    expect(gradePrediction(def, 2).correct).toBe(false);
+  });
+
+  it('grades numeric predictions within tolerance', () => {
+    const def = { input: true, answer: 3, tol: 0.5 };
+    expect(gradePrediction(def, 3).correct).toBe(true);
+    expect(gradePrediction(def, 3.4).correct).toBe(true);
+    expect(gradePrediction(def, 2.6).correct).toBe(true);
+    expect(gradePrediction(def, 4).correct).toBe(false);
+    expect(gradePrediction(def, '3.2').correct).toBe(true); // parses string input
+    expect(gradePrediction(def, 'nope').correct).toBe(false); // NaN never matches
+  });
+
+  it('numeric grading defaults to an exact match when no tolerance is given', () => {
+    const def = { input: true, answer: 5 };
+    expect(gradePrediction(def, 5).correct).toBe(true);
+    expect(gradePrediction(def, 5.1).correct).toBe(false);
+  });
+
+  it('is demonstrated on a real lab: the newton interactive owns a gradeable predict def', () => {
+    // the newton lab (calc second-order lesson) is our reference wiring. We
+    // capture the predict def by driving the interactive with a stub stage +
+    // api; grading it against its own answer must succeed.
+    const lesson = LESSONS.find(l =>
+      l.interactive === 'newton' || (l.labs || []).some(x => x.interactive === 'newton'));
+    expect(lesson, 'a lesson should use the newton interactive').toBeTruthy();
+
+    // a stage stub rich enough for makeLab()/chips()/slider() to run headless
+    const stageStub = () => {
+      const node = {
+        style: {}, className: '', innerHTML: '',
+        classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
+        appendChild: noop, insertBefore: noop, setAttribute: noop,
+        addEventListener: noop, firstChild: null,
+        querySelectorAll: () => [], querySelector: () => null,
+        getContext: () => new Proxy({}, { get: () => (() => {}) }),
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 640, height: 440 }),
+        // chips() does `.children[0].classList.add('on')`, so hand back a stub
+        get children() { return [stageStub()]; },
+      };
+      return node;
+    };
+    const origCreate = document.createElement;
+    document.createElement = () => stageStub();
+    let predictDef = null;
+    const stubApi = {
+      missions: () => ({ update: noop, allDone: () => false, el: {} }),
+      predict: (def) => { predictDef = def; return { committed: () => false, el: {} }; },
+    };
+    try {
+      INTERACTIVES.newton(stageStub(), stubApi);
+    } finally {
+      document.createElement = origCreate;
+    }
+    expect(predictDef, 'newton lab should call api.predict').toBeTruthy();
+    expect(predictDef.prompt).toBeTruthy();
+    expect(Array.isArray(predictDef.choices)).toBe(true);
+    expect(predictDef.answer).toBeGreaterThanOrEqual(0);
+    expect(predictDef.answer).toBeLessThan(predictDef.choices.length);
+    expect(gradePrediction(predictDef, predictDef.answer).correct).toBe(true);
+  });
+});
+
 describe('daily review queue — buildReviewQueue / interleaveByWorld', () => {
   let buildReviewQueue, interleaveByWorld, SCORING;
   // deterministic rng: cycles a fixed sequence so tie-breaks are reproducible
