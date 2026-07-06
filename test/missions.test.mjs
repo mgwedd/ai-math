@@ -222,6 +222,10 @@ describe('no lab auto-completes a mission at load', () => {
         missionCount = defs.length;
         return makeMissions(stage, missionId, defs);
       },
+      // Some labs gate on a predict-then-verify prompt (api.predict). At load
+      // the prediction is uncommitted; a benign stub lets the lab render so its
+      // missions can still be audited. Mirrors the real predict() return shape.
+      predict: () => ({ committed: () => false, el: makeNode() }),
       onDone: noop,
     };
     let error = null;
