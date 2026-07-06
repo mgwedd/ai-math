@@ -1,0 +1,30 @@
+# c-integrals — Integrals: Area Under the Curve
+
+## Dig Deeper appendix (curated — graduate-authoritative)
+
+### Read
+- [Area Problem — Paul's Online Math Notes](https://tutorial.math.lamar.edu/Classes/CalcI/AreaProblem.aspx) — Clear exposition of Riemann sums via left, right, and midpoint rectangle methods, the limiting process as n → ∞, and signed area. Includes worked examples with f(x) = x² + 1. Addresses the over/underestimation rule correctly: left sums undershoot a *rising* curve, overshoot a *falling* curve — monotonicity determines direction, not choice of endpoint alone.
+- [Definition of the Definite Integral — Paul's Online Math Notes](https://tutorial.math.lamar.edu/Classes/CalcI/DefnOfDefiniteIntegral.aspx) — Formal limit definition of the definite integral, six properties, signed vs. total area, the Net Change Theorem, and FTC Part I (differentiation of the accumulation function F(x) = ∫_a^x f(t) dt). Seven worked examples. The best single written reference for the lesson's FTC gaps.
+- [Fundamental Theorem of Calculus — Wikipedia](https://en.wikipedia.org/wiki/Fundamental_theorem_of_calculus) — Graduate-level reference covering both FTC parts with proofs: Part I (d/dx ∫_a^x f(t) dt = f(x)) and Part II (∫_a^b f(x) dx = F(b) − F(a)). Also covers why Part II depends on an antiderivative existing — not always guaranteed — and the historical context. Essential for clearing up the lesson's conflation of the two parts.
+- [MIT 18.01SC — Unit 3: The Definite Integral and Its Applications](https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/pages/unit-3-the-definite-integral-and-its-applications/) — MIT 18.01SC's full integration unit with Sessions 43–51 covering Riemann sums, FTC Parts I and II, the MVT for integrals, and applications. Video clips, recitations, and problem sets by Prof. David Jerison. University-level authority for everything this lesson teaches.
+
+### Watch
+- [Integration and the Fundamental Theorem of Calculus | Chapter 8, Essence of Calculus (3Blue1Brown)](https://www.youtube.com/watch?v=rfG8ce4nNh0) (3Blue1Brown, ~21 min) — Builds geometric intuition for why integrals and derivatives are inverses. Uses a velocity/distance car scenario to make the FTC feel "almost obvious" rather than a theorem to memorize. Covers signed area and the accumulation function. The best first watch before the formalism.
+- [What Does Area Have to Do With Slope? | Chapter 9, Essence of Calculus (3Blue1Brown)](https://www.youtube.com/watch?v=FnJqaIESC2s) (3Blue1Brown, ~12 min) — Deepens the FTC connection: shows why the area function's derivative equals the original curve (FTC Part I as a visual argument). Essential companion for the "why are integration and differentiation inverses?" question the lesson gestures at.
+
+## Science & depth recommendations (to reach master's level)
+
+- **FTC Part I is absent** → the lesson only teaches Part II (∫_a^b f'(x) dx = f(b) − f(a)) and mentions Part I only briefly. FTC Part I — d/dx ∫_a^x f(t) dt = f(x) — is the theoretical heart of the theorem and directly underlies Neural ODEs and continuous normalizing flows. Add a paragraph: "Part I says differentiating an accumulation function returns the integrand: F(x) = ∫_a^x f(t) dt implies F'(x) = f(x). This is why integration and differentiation are inverses — a theorem, not just a metaphor." Ground in Wikipedia FTC and Paul's Notes.
+- **Over/underestimation rule is overgeneralized** → the lab note says "left-edge rectangles undershoot a rising curve; right-edge overshoot" as if universal. This is only true for monotone-increasing functions; on a monotone-decreasing function the roles swap. A non-monotone function obeys neither rule. Correct to: "On a *rising* curve, left-edge undershoots and right-edge overshoots. On a *falling* curve the roles swap. Monotonicity determines the direction of error." Ground in Wikipedia Riemann Sum article.
+- **Signed area vs. total area is invisible** → the lab's function (x²/4 + 1/2) is always positive on [0, 4], so learners never see the signed-area behavior. The definite integral gives *net* signed area; regions below the x-axis count negatively. This matters for probability (log-likelihood ratios), displacement vs. distance, and gradient contributions. Add a note or deeper card: "If f dips below the x-axis, those rectangles subtract from the sum — ∫ measures net signed area. Total area requires ∫|f(x)| dx." Ground in Paul's Notes DefnOfDefiniteIntegral.
+
+## Sources
+- [3Blue1Brown — Integration and FTC, YouTube](https://www.youtube.com/watch?v=rfG8ce4nNh0) — high-quality explainer, Essence of Calculus Ch. 8
+- [3Blue1Brown — Integration, lesson page](https://www.3blue1brown.com/lessons/integration/) — companion written article
+- [3Blue1Brown — Area vs Slope (FTC Part I), YouTube](https://www.youtube.com/watch?v=FnJqaIESC2s) — high-quality explainer, Essence of Calculus Ch. 9
+- [Paul's Online Math Notes — Area Problem](https://tutorial.math.lamar.edu/Classes/CalcI/AreaProblem.aspx) — canonical text; Riemann sums, monotonicity-based over/underestimation
+- [Paul's Online Math Notes — Definition of Definite Integral](https://tutorial.math.lamar.edu/Classes/CalcI/DefnOfDefiniteIntegral.aspx) — canonical text; FTC Part I, six properties, signed area, net change theorem
+- [Paul's Online Math Notes — Computing Definite Integrals](https://tutorial.math.lamar.edu/classes/calci/computingdefiniteintegrals.aspx) — canonical text; FTC Part II, antiderivative mechanics, +C cancellation
+- [Wikipedia: Fundamental Theorem of Calculus](https://en.wikipedia.org/wiki/Fundamental_theorem_of_calculus) — canonical reference; both parts with proofs, historical context
+- [Wikipedia: Riemann Sum](https://en.wikipedia.org/wiki/Riemann_sum) — canonical reference; all four variants, convergence, over/underestimation table
+- [MIT 18.01SC — Unit 3: Definite Integral and Applications](https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/pages/unit-3-the-definite-integral-and-its-applications/) — MIT 18.01SC university lecture; Sessions 43–51 with video and problem sets
