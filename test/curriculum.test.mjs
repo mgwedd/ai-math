@@ -119,6 +119,62 @@ describe('the shipped curriculum is coherent', () => {
   });
 });
 
+describe('cumulative qualifying-exam pool + retake nudges (P0 #7)', () => {
+  let engine, SCORING;
+  beforeAll(async () => {
+    engine = await import('../lib/engine.js'); // no top-level DOM exec → safe under stubs
+    SCORING = engine.SCORING;
+  });
+
+  it('exposes an exam scoring knob with sane bounds', () => {
+    expect(SCORING.exam).toBeTruthy();
+    expect(SCORING.exam.draw).toBeGreaterThanOrEqual(1);
+    expect(SCORING.exam.passPct).toBeGreaterThan(0);
+    expect(SCORING.exam.passPct).toBeLessThanOrEqual(1);
+    expect(SCORING.exam.pass).toBeGreaterThan(0);
+  });
+
+  it('draws the exam pool CUMULATIVELY from this world and all prior worlds', () => {
+    const { examPoolFor, WORLD_ORDER, worldLessons } = engine;
+    let prevLen = -1;
+    for (const w of WORLD_ORDER) {
+      const pool = examPoolFor(w, WORLD_ORDER, worldLessons);
+      for (const r of pool) {                       // every ref resolves to a real question
+        const l = LESSONS.find(x => x.id === r.lessonId);
+        expect(l).toBeTruthy();
+        expect(l.quiz[r.qi]).toBeTruthy();
+      }
+      expect(pool.length).toBeGreaterThanOrEqual(prevLen); // cumulative → monotonically grows
+      prevLen = pool.length;
+    }
+  });
+
+  it('the LAST world pool includes questions from the FIRST world', () => {
+    const { examPoolFor, WORLD_ORDER, worldLessons } = engine;
+    const first = WORLD_ORDER[0], last = WORLD_ORDER[WORLD_ORDER.length - 1];
+    const firstIds = new Set(worldLessons(first).map(l => l.id));
+    const lastPool = examPoolFor(last, WORLD_ORDER, worldLessons);
+    expect(lastPool.some(r => firstIds.has(r.lessonId))).toBe(true);
+  });
+
+  it('an unknown world yields an empty pool', () => {
+    const { examPoolFor, WORLD_ORDER, worldLessons } = engine;
+    expect(examPoolFor('does-not-exist', WORLD_ORDER, worldLessons)).toEqual([]);
+  });
+
+  it('examNudge escalates day → week → month; null before/without a pass', () => {
+    const { examNudge } = engine;
+    const now = 1_000_000_000_000;
+    const DAY = 24 * 60 * 60 * 1000;
+    expect(examNudge(null, now)).toBeNull();          // never passed
+    expect(examNudge(now, now)).toBeNull();           // just passed
+    expect(examNudge(now, now + DAY - 1)).toBeNull(); // not quite a day
+    expect(examNudge(now, now + DAY).key).toBe('day');
+    expect(examNudge(now, now + 7 * DAY).key).toBe('week');
+    expect(examNudge(now, now + 45 * DAY).key).toBe('month'); // strongest due tier wins
+  });
+});
+
 describe('predict-then-verify primitive', () => {
   let gradePrediction, SCORING;
   beforeAll(async () => {
