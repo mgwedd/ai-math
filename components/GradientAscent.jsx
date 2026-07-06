@@ -108,15 +108,53 @@ function AuthGate() {
     setBusy(false);
   }
 
+  // Google sign-in (OAuth). Full-page redirect to Google and back to the app
+  // origin, where the browser client exchanges the code and the auth listener
+  // enters the game. On success the page navigates away, so we only clear the
+  // busy flag on error.
+  async function googleSignIn() {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setMsg({ kind: 'error', text: 'Auth is not configured — missing NEXT_PUBLIC_SUPABASE_URL / key.' });
+      return;
+    }
+    setBusy(true); setMsg(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      });
+      if (error) throw error;
+    } catch (err) {
+      setMsg({ kind: 'error', text: err.message || 'Google sign-in failed.' });
+      setBusy(false);
+    }
+  }
+
   return (
     <div className={'modal-back auth-back' + (settled ? ' settled' : '')}>
       <form className="modal" onSubmit={submit}>
-        <h2>📈 Gradient Ascent</h2>
+        <h2><span className="brand-mark">◈</span> <span className="brand-word">Lattice</span></h2>
         <p>
           {mode === 'signin'
-            ? 'Sign in to continue your climb — XP, lessons and quiz history follow your account.'
-            : 'Create an account to start the climb from vectors to gradients.'}
+            ? 'Welcome back — your lessons and progress are saved to your account.'
+            : 'Create an account to start learning the math behind AI.'}
         </p>
+
+        {/* Preferred: passkey (returning) then Google. Email is the fallback. */}
+        <div className="auth-primary">
+          {mode === 'signin' && (
+            <button type="button" className="btn btn-social" disabled={busy} onClick={passkeySignIn}>
+              🔑 Continue with a passkey
+            </button>
+          )}
+          <button type="button" className="btn btn-social" disabled={busy} onClick={googleSignIn}>
+            <GoogleMark /> Continue with Google
+          </button>
+        </div>
+
+        <div className="auth-or"><span>or use your email</span></div>
+
         <input
           type="email" required placeholder="email"
           value={email} onChange={(e) => setEmail(e.target.value)}
@@ -145,17 +183,9 @@ function AuthGate() {
             textAlign: 'left', marginTop: '-6px',
           }}>{msg.text}</p>
         )}
-        <button className="btn" disabled={busy} type="submit">
-          {busy ? '…' : mode === 'signin' ? 'Sign in →' : 'Create account →'}
+        <button className="btn btn-email" disabled={busy} type="submit">
+          {busy ? '…' : mode === 'signin' ? 'Sign in with email →' : 'Create account with email →'}
         </button>
-        {mode === 'signin' && (
-          <>
-            <div className="auth-or"><span>or</span></div>
-            <button type="button" className="btn btn-alt" disabled={busy} onClick={passkeySignIn}>
-              🔑 Sign in with a passkey
-            </button>
-          </>
-        )}
         <p style={{ marginTop: '14px', marginBottom: 0 }}>
           {mode === 'signin' ? 'New here? ' : 'Already registered? '}
           <a
@@ -167,6 +197,18 @@ function AuthGate() {
         </p>
       </form>
     </div>
+  );
+}
+
+// Official Google "G" mark, used on the Google sign-in button.
+function GoogleMark() {
+  return (
+    <svg className="g-mark" width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
   );
 }
 
@@ -251,7 +293,7 @@ export default function GradientAscent() {
       <div id="app">
         <header>
           <div className="logo" onClick={() => window.go && window.go('home')}>
-            📈 <span>Gradient Ascent</span>
+            <span className="brand-mark">◈</span> <span>Lattice</span>
           </div>
           <div className="hud">
             <div className="xpbar-wrap">
@@ -270,7 +312,7 @@ export default function GradientAscent() {
           </div>
         </header>
         <main id="view"></main>
-        <footer>Gradient Ascent · Learn the math behind AI by doing · progress syncs to your account</footer>
+        <footer>Lattice · Learn the math behind AI by doing · progress syncs to your account</footer>
       </div>
       <div id="toasts"></div>
       <canvas id="fx"></canvas>

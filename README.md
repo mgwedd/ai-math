@@ -1,4 +1,4 @@
-# ai-math — Gradient Ascent
+# ai-math — Lattice
 
 Gamified, interactive math curriculum aimed at engineers heading toward AI
 research. Next.js (App Router) + a framework-free canvas game engine,
