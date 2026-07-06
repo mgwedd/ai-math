@@ -103,13 +103,12 @@ Run the tests (curriculum coherence checks — no database needed):
 npm test
 ```
 
-> **Local auth constraint.** The local stack has **no auth server**, so the real
-> sign-in providers — **passkeys, Google, and email/password — don't work
-> locally**. Instead the app auto-signs-in as a fixed dev user (via
-> `DEV_AUTH` / `NEXT_PUBLIC_DEV_AUTH`), which is exactly what you want for
-> development: no login friction, full read/write persistence to the local
-> Postgres. To exercise the real auth providers, use the hosted app or point the
-> app at your own cloud Supabase project (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+> **Local auth.** The compose stack bundles its own auth server, so you can
+> **register and sign in with email/password entirely locally — no cloud
+> account.** Your progress persists to the local Postgres and survives restarts.
+> **Passkeys and Google stay cloud-only** (they need a public domain / OAuth
+> credentials). Prefer zero-login hacking? An opt-in dev-user bypass is available
+> too. Details and the self-host setup are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Tech stack
 
