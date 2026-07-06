@@ -12,7 +12,7 @@ Postgres-backed progress, wired together with Docker Compose.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Browser                                                        │
 │                                                                 │
-│  GradientAscent.jsx — thin React shell (auth gate + mount)      │
+│  Lattice.jsx — thin React shell (auth gate + mount)      │
 │  │                                                              │
 │  │  Supabase Auth  ──►  session cookie                          │
 │  │       │                                                      │
@@ -59,7 +59,7 @@ Postgres-backed progress, wired together with Docker Compose.
 
 This is a **single-page gamified curriculum** where a framework-free game
 engine owns all post-login rendering. The React layer is intentionally thin:
-`GradientAscent.jsx` handles auth state, then calls `engine.mount()` and
+`Lattice.jsx` handles auth state, then calls `engine.mount()` and
 never touches the DOM again. The engine injects HTML into `<main id="view">`
 directly, uses its own URL-less router (`go('home') / go('lesson', id)`
 exposed on `window.go`), and manages a single serializable state object `S`.
@@ -165,7 +165,7 @@ engine.js):
 - `registerCleanup(fn)` — registers a function called on navigation away.
 
 **Dev shortcut:** `NEXT_PUBLIC_DEV_AUTH=1` bypasses Supabase entirely
-(hardcoded session in `GradientAscent.jsx`). Hot-reload against compose db:
+(hardcoded session in `Lattice.jsx`). Hot-reload against compose db:
 `docker compose up db -d && npm run dev`.
 
 ---
@@ -183,7 +183,7 @@ ai-math/
 │
 ├── app/
 │   ├── layout.js                           # root layout (html, body, title)
-│   ├── page.js                             # renders <GradientAscent /> — nothing else
+│   ├── page.js                             # renders <Lattice /> — nothing else
 │   ├── globals.css                         # all CSS: game UI, auth modal, canvas labs
 │   └── api/
 │       ├── health/route.js                 # GET  /api/health  — liveness + db check (public)
@@ -194,7 +194,7 @@ ai-math/
 │       └── leaderboard/route.js            # GET  /api/leaderboard — top 20 by xp
 │
 ├── components/
-│   └── GradientAscent.jsx                  # auth gate (Supabase) + engine mount point
+│   └── Lattice.jsx                  # auth gate (Supabase) + engine mount point
 │                                           # DEV_MODE=1 short-circuits auth
 │
 ├── lib/

@@ -1,5 +1,5 @@
-import GradientAscent from '@/components/GradientAscent';
+import Lattice from '@/components/Lattice';
 
 export default function Home() {
-  return <GradientAscent />;
+  return <Lattice />;
 }
