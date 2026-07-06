@@ -1,5 +1,9 @@
 # Deployment (Vercel + Supabase)
 
+> Looking to run Minima on your own machine with no cloud Supabase? Jump to
+> [Self-hosting with local email/password auth](#self-hosting-with-local-emailpassword-auth).
+
+
 The app is a Next.js 15 App Router app deployed on **Vercel** (serverless
 functions) backed by **Supabase**: Supabase Auth for login and Supabase
 Postgres for the `progress` / `xp_events` / `quiz_answers` /
@@ -141,3 +145,122 @@ the **database call failed**. Work through these in order:
 5. **Confirm the env var is set for the right environment.** A value set only for
    Preview won't apply to Production, and vice-versa. Redeploy after changing env
    vars — Vercel bakes them at build/deploy time.
+
+---
+
+## Self-hosting with local email/password auth
+
+You can run the entire app on your own machine — **register and sign in with
+email + password, with no cloud Supabase** — using Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+Then open <http://localhost:3000>, create an account with email + password, and
+your progress persists to a local Postgres. Nothing leaves your machine.
+
+### What `docker compose up` starts
+
+| Service | Image | Role |
+| --- | --- | --- |
+| `db` | `postgres:16-alpine` | Postgres. Init scripts (`db/init/`) create the `auth` schema, `auth.uid()`, and the `anon`/`authenticated`/`postgres`/`service_role`/`supabase_auth_admin` roles — **but not `auth.users`** (GoTrue owns that). |
+| `auth` | `supabase/gotrue:v2.177.0` | **GoTrue**, Supabase's auth server. Runs its own migrations to create `auth.users`/`identities`/`sessions`/… and issues session JWTs. `GOTRUE_MAILER_AUTOCONFIRM=true` means no SMTP is needed — signups are confirmed instantly. |
+| `migrate` | `postgres:16-alpine` | One-shot. Applies `supabase/migrations/*.sql` **after** GoTrue created `auth.users` (so the app's FKs/triggers resolve), then exits. `app` waits for it to complete. |
+| `proxy` | `nginx:alpine` | Reverse proxy. The Supabase JS client calls `${SUPABASE_URL}/auth/v1/*`; GoTrue serves at its root. `db/proxy/nginx.conf` maps `/auth/v1/ → http://auth:9999/`. Published on host port `8000`. |
+| `app` | built from `./Dockerfile` | The Next.js app. |
+
+Startup order is enforced with healthchecks and `depends_on`:
+`db` (healthy) → `auth` (healthy) → `migrate` (completed) → `app`.
+
+### Browser-vs-server URL split (why there are two Supabase URLs)
+
+`NEXT_PUBLIC_SUPABASE_URL` is baked into the **browser** bundle at build time and
+must be reachable from your host, so it's `http://localhost:8000` (the proxy).
+The app's **server** code runs inside the compose network and reaches the proxy
+at `http://proxy:8000`, set at runtime as `SUPABASE_URL`. `lib/auth-server.js`
+prefers `SUPABASE_URL` over `NEXT_PUBLIC_SUPABASE_URL` for exactly this reason
+(harmless in prod, where only `NEXT_PUBLIC_SUPABASE_URL` is set).
+
+### Verifying it works from the command line
+
+```bash
+ANON="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlLWRlbW8iLCJpYXQiOjE2NDE3NjkyMDAsImV4cCI6MTc5OTUzNTYwMH0.F_rDxRTPE8OU83L_CNgEGXfmirMXmMMugT29Cvc8ygQ"
+curl -s -X POST http://localhost:8000/auth/v1/signup \
+  -H "apikey: $ANON" -H "Authorization: Bearer $ANON" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"password1234"}'
+```
+
+A `200` with an `access_token` means auth is live. (In the browser you'd just
+use the sign-up form instead.)
+
+### What is NOT available locally (by design)
+
+**Passkeys and Google sign-in are cloud-only.** They require a public domain
+and/or OAuth credentials that a local machine doesn't have. Use email/password
+locally. The app still exposes those buttons, but they won't complete against
+the local stack — that's expected.
+
+### Data persistence — your progress survives restarts
+
+Progress lives in a Docker **named volume** (`pgdata`).
+
+- `docker compose stop` / `docker compose down` — **KEEP** the volume. Your
+  account and progress survive; `docker compose up` again picks up where you
+  left off. This is the normal way to stop.
+- `docker compose down -v` — **WIPES** the volume (the `-v` deletes it). Reserve
+  this for a deliberate full reset; it deletes every account and all progress.
+
+#### Optional: persistence that survives even a full `down -v`
+
+If you want your data to outlive an accidental `down -v`, use an **external**
+named volume (Docker won't delete external volumes on `down -v`). Create it once,
+then always include the override file:
+
+```bash
+docker volume create minima-pgdata
+docker compose -f docker-compose.yml -f docker-compose.persist.yml up -d --build
+```
+
+To actually delete that data later: `docker volume rm minima-pgdata`.
+(A gitignored host bind-mount is a fine alternative if you'd rather see the files
+on disk; point `db.volumes` at `./.pgdata:/var/lib/postgresql/data`. `.pgdata/`
+is already gitignored.)
+
+### Optional: zero-login dev bypass
+
+To hack on the app **without** registering, bring up the opt-in override, which
+trusts a fixed dev identity (`dev@astrealabs.com`) and skips GoTrue entirely:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev-auth.yml up -d --build
+```
+
+This flips the app to `DEV_AUTH=1`. The bypass is **hard-disabled on Vercel**
+(`lib/auth-server.js` refuses it when `VERCEL` is set), so it can never leak into
+production.
+
+### ⚠️ Security: the local secrets are demo values — change them for any real deployment
+
+The compose stack hardcodes the **well-known Supabase local demo** JWT secret and
+a matching `anon` key:
+
+- `GOTRUE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long`
+- the local `anon` JWT (see `docker-compose.yml`).
+
+These are **fine for a laptop but are public and MUST be regenerated for any
+real / internet-facing deployment.** If you ever expose this stack beyond
+localhost, you must at minimum:
+
+1. Replace `GOTRUE_JWT_SECRET` with a fresh 32+ char secret.
+2. Mint a new `anon` JWT signed with that secret (role `anon`) and update both
+   the `app` build arg `NEXT_PUBLIC_SUPABASE_ANON_KEY` and the runtime
+   `SUPABASE_ANON_KEY`.
+3. Change `POSTGRES_PASSWORD` (and thus the `DATABASE_URL` / GoTrue DB URL).
+4. Set real `GOTRUE_SITE_URL` / `API_EXTERNAL_URL` to your public domain, front
+   the stack with TLS, and configure SMTP (turn off `GOTRUE_MAILER_AUTOCONFIRM`
+   so emails are actually verified).
+
+For a managed, production-grade deployment, prefer cloud Supabase (top of this
+doc) over self-hosting GoTrue.

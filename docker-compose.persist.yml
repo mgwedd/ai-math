@@ -1,0 +1,22 @@
+# OPT-IN durable persistence. Uses an EXTERNAL named volume so your progress
+# survives even a full `docker compose down -v` (which only removes volumes
+# compose itself created, not external ones).
+#
+# Create the volume once:
+#
+#   docker volume create minima-pgdata
+#
+# Then always include this file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.persist.yml up -d --build
+#
+# To actually delete the data later: `docker volume rm minima-pgdata`.
+services:
+  db:
+    volumes:
+      - minima-pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  minima-pgdata:
+    external: true
