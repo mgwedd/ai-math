@@ -96,6 +96,18 @@ when the URL contains an `sslmode`, or `DATABASE_SSL_CA` is set, or
 | --- | --- | --- |
 | `PG_POOL_MAX` | `1` on Vercel, `10` otherwise | Per-instance pool cap. Keep it small (1) on serverless — each function instance holds its own pool and the pooler multiplexes across them. |
 | `DEV_AUTH` | unset | `DEV_AUTH=1` bypasses Supabase auth with a fixed dev identity. **Hard-disabled when `VERCEL` is set** — never trusted in production. Local docker-compose only. |
+| `WOLFRAM_APP_ID` | unset | **Optional** knowledge-base enrichment key (server-side only). When set, `GET /api/kb/concept/[slug]` adds cached Wolfram\|Alpha pods to concept cards. Free non-commercial AppID: https://developer.wolframalpha.com/. |
+
+### Knowledge-base enrichment is optional (zero keys required)
+
+The KB layer (`lib/kb/`, `GET /api/kb/concept/[slug]`) is **purely additive and
+degrades gracefully**. With **no keys at all** the app behaves exactly as
+before: Wikipedia summaries (the REST `page/summary` endpoint needs no key) and
+registry-derived "related concepts" still render, and any Wolfram field is
+simply omitted. Set `WOLFRAM_APP_ID` to add computed/verification pods. An
+upstream outage or rate-limit never surfaces an error — responses fall back to
+the long-lived `kb_cache` (serve-stale) or drop the field. All keys stay
+server-side; the browser never talks to a wellspring directly.
 
 ## Troubleshooting a 500 on `/api/state`
 
