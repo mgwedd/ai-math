@@ -41,7 +41,9 @@ import '../lib/curriculum/index.js'; // side-effect: populate LESSONS
 import { wolfram } from '../lib/kb/sources/wolfram.js';
 import { wikipedia } from '../lib/kb/sources/wikipedia.js';
 
-const MODEL = 'claude-opus-4-8'; // sourced from the local `claude-api` skill (current Opus)
+// Generation model is configurable so the pipeline can be tuned for cost vs.
+// quality without a code change; defaults to a current mid-tier Claude.
+const MODEL = process.env.KB_GENERATE_MODEL || 'claude-sonnet-5';
 const COVERAGE_FLOOR = 10;       // concepts with < this many live bank items are eligible
 
 /* ---------- arg parsing ---------- */
