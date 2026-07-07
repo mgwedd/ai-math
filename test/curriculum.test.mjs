@@ -556,4 +556,14 @@ describe('type-aware quiz-shape validation (numeric + order)', () => {
     expect(withSpy({ quiz: [{ q: '?', opts: ['a', 'b'], a: 5 }] })).toBe(true);
     expect(withSpy({ quiz: [{ type: 'mc', q: '?', opts: ['a'], a: 0 }] })).toBe(true);
   });
+
+  // Optional `wolfram` Show-Steps hint (KB PR 4): a non-empty string when present.
+  it('accepts an optional `wolfram` hint that is a non-empty string', () => {
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, why: 'x', wolfram: 'derivative of x^3 at x = 2' }] })).toBe(false);
+  });
+
+  it('rejects a `wolfram` hint that is not a non-empty string', () => {
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, wolfram: '' }] })).toBe(true);
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, wolfram: 42 }] })).toBe(true);
+  });
 });
