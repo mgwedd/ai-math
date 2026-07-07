@@ -9,6 +9,7 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
+    "kb:generate": "node scripts/kb-generate.mjs",
     "hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
@@ -22,6 +23,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
     "vitest": "^4.1.9"
   }
 }
