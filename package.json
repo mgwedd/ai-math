@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "kb:generate": "node scripts/kb-generate.mjs",
+    "kb:promote": "node scripts/kb-promote.mjs",
     "hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
