@@ -32,21 +32,36 @@ jobs:
   topup:
     name: generate + auto-promote
     runs-on: ubuntu-latest
-    # Skip (not fail) when the secrets this job needs aren't configured — the
-    # normal state for forks and for this repo until an operator opts in.
-    if: ${{ secrets.ANTHROPIC_API_KEY != '' && secrets.WOLFRAM_APP_ID != '' && secrets.DATABASE_URL != '' }}
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       WOLFRAM_APP_ID: ${{ secrets.WOLFRAM_APP_ID }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      # Skip (not fail) when the secrets this job needs aren't configured — the
+      # normal state for forks and for this repo until an operator opts in.
+      # (A job-level `if:` can't read the `secrets` context, so gate at the step
+      # level off an env-derived flag instead.)
+      - name: Check for required secrets
+        id: guard
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$WOLFRAM_APP_ID" ] && [ -n "$DATABASE_URL" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::KB top-up secrets not configured — skipping generate/promote."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.guard.outputs.ready == 'true'
+        uses: actions/checkout@v7
+      - if: steps.guard.outputs.ready == 'true'
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      - if: steps.guard.outputs.ready == 'true'
+        run: npm ci
       - name: Generate candidates (LLM author -> schema gate -> Wolfram gate -> dedup -> verified)
+        if: steps.guard.outputs.ready == 'true'
         run: npm run kb:generate
       - name: Auto-promote trusted concepts (verified -> live)
+        if: steps.guard.outputs.ready == 'true'
         run: npm run kb:promote -- --auto
