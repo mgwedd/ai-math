@@ -47,27 +47,51 @@ in `lesson-reports/` (web-grounded audit; chip away between increments).
   clean, and inline feedback is well-formed — wired to a pre-push hook and a
   GitHub Actions matrix (Node 22/24).
 
-### In flight (open PRs this wave — the "second half" build-out)
-Parallel worktree PRs, one file each, each independently mergeable:
-- **World 1** — orthogonality/projection/least-squares/Gram–Schmidt
-  (`la-projection.js`) → P0 #4.
-- **World 2** — multivariable/tangent-plane, Jacobian chain rule, Lagrange
-  (`calc-multivariable.js`) → P0 #6.
-- **World 3** — joint/conditional/covariance (`prob-structure.js`, P0 #8);
-  statistics & evidence: estimators, CIs, permutation tests (`stat.js`, P0 #5).
-- **World 4** — logistic-regression-as-MLE + regularization
-  (`ml-classification.js`), trees/ensembles/evaluation (`ml-trees-eval.js`),
-  in-browser MLP capstone (`ml-capstone.js`) → P0 #1, #2.
-- **Engine UX** — URL routing + browser history (deep-linkable lessons,
-  working back/forward) via the History API (`engine.js`).
+### In flight (open PRs this wave — KB pipeline + MS-gap closure)
 
-When this wave lands, P0 items 1, 2, 4, 5, 6, 8 are shipped — leaving
-production-mode assessment (#3) and the spaced-repetition/exam loop (#7) as
-the P0 remainder, plus the per-file fidelity/depth backlog below.
+**Knowledge-base pipeline** (docs/KNOWLEDGE-BASE-PLAN.md; all seven complete
+& CI-green). Merge in dependency order **#33 → #55 → #53 → #54 → {#56, #57}
+→ #58 → #59 → #60**, retargeting each stacked PR to main as its parent lands:
+- #53 concept registry (the KB spine) · #54 answer telemetry · #56 service
+  layer (Wikipedia/Wolfram adapters + cache) · #57 parameterized generators ·
+  #58 enrichment UI · #59 practice surface + LLM→verify pipeline · #60
+  hardening & evergreen loop.
+- The four migrations (#54/#56/#59/#60) were applied and smoke-tested against
+  a real local Postgres 16 in merge order; apply to the live DB at merge
+  time. Post-merge follow-up: wire the kb-steps rate cap into #58's route
+  (one line; documented in #60's runbook).
+- Also open: #33 Next 16 bump (merge first — carries High-severity security
+  fixes; build green) · #55 KaTeX pass on la-core-labs · #52 World 2
+  challenge labs (branch updated to current main).
+
+**MS-gap closure wave** (per CURRICULUM-REVIEW.md; one module per PR):
+- #61 research depth-pass — 10 audit items applied across existing lessons
+- #62 `ml-unsupervised` — k-means · GMM/EM · PCA (3 lessons)
+- #63 `ml-conv` — convolution & CNN feature hierarchies (2 lessons)
+- #64 `ml-kernels` — max-margin/SVM geometry · the kernel trick (2 lessons)
+- #65 `proofs` — proof-literacy micro-course (4 lessons; the P1 item)
+- `rl.js` — MDPs/value iteration · Q-learning · policy gradients→RLHF bridge
+  (3 lessons; PR pending)
+The nine dig-deeper research-report PRs (#40–48) are merged; their remaining
+recommendations landed as #61.
 
 ---
 
-## Next up (P0 — required for credible MS prep)
+## P0 — all eight shipped ✅
+
+Every P0 item is now on main: (1) classical-ML breadth
+(`ml-classification.js`, `ml-trees-eval.js`) · (2) in-browser MLP capstone
+(`ml-capstone.js`) · (3) production-mode assessment (question-type registry
+mc/numeric/order + predict-then-verify gates, PRs #21–22) · (4)
+orthogonality/projection (`la-projection.js`) · (5) statistics & evidence
+(`stat.js`) · (6) multivariable + Lagrange (`calc-multivariable.js`) · (7)
+spaced-repetition daily review + per-world cumulative exams with retake
+nudges (PRs #20, #23, #27) · (8) joint/conditional structure
+(`prob-structure.js`). Original item specs preserved below for reference
+until the wave above merges, then prune.
+
+<details>
+<summary>Original P0 specs (archived)</summary>
 
 ## 1. World 4 breadth: classical ML + evaluation
 4 lessons before the transformer arc: logistic regression **as MLE** (cashes
@@ -128,24 +152,25 @@ covariance/correlation (draggable point-cloud; feeds PCA and n-D Gaussians).
 The substrate of graphical models and of the chain rule of probability that
 defines LLM training.
 
+</details>
+
 ---
 
 ## Then (P1 — differentiating depth)
 
-- **Numerics for ML** (2): floating point + log-sum-exp (softmax overflow
-  lab) · conditioning & stability ("solve, don't invert" made quantitative).
-- **Info-theory bridge** (2): cross-entropy = NLL = KL + entropy as its own
-  lesson (THE identity of deep learning) · mutual information intuition.
-- **Markov chains** (1): stationary distribution as the λ=1 eigenvector —
-  reuses power iteration from la-eigen; prereq for RL/MCMC.
-- **Positive definiteness** (1): xᵀAx landscapes (bowl/saddle/dome); ties
-  Hessians (W2) to covariance (W3) to kernels (W4).
+Shipped: numerics for ML (`numerics.js`, #39) · info-theory bridge
+(`info-theory.js`, #38) · Markov chains (`markov.js`, #36) · positive
+definiteness (`posdef.js`, #37). In flight: proof-writing micro-course
+(#65) · clustering/EM, PCA, kernels/SVM, CNNs, RL (see wave above).
+
+Remaining:
 - **Backlog labs** from `lesson-reports/README.md`: ill-conditioned-bowl GD
   (condition-number slider), saddle-free Newton toggle, signed-area
   explorer, MLE likelihood-curve, sequential Bayes updater.
-- **Proof-writing micro-course** (4–6 short lessons, no canvas): direct
-  proof, contrapositive, induction, counterexample-hunting — assessed via
-  derivation-ordering/flaw-spotting; real writing happens on paper (below).
+- **Graphical-models taste** (1–2): Bayes nets as factored joints (rides on
+  prob-joint/prob-independence); d-separation at intuition level.
+- **Generative-models bridge** (1–2): VAE/diffusion intuition (rides on
+  prob, info-theory, ml-mlp) — modern MS programs expect exposure.
 
 ## Beyond the app (the part admissions actually weighs)
 
