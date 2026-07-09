@@ -1,0 +1,50 @@
+{
+  "queryresult": {
+    "success": true,
+    "error": false,
+    "numpods": 2,
+    "datatypes": "Math",
+    "timing": 0.735,
+    "version": "2.6",
+    "inputstring": "derivative of x^3 at x = 2",
+    "pods": [
+      {
+        "title": "Input",
+        "scanner": "Derivative",
+        "id": "Input",
+        "position": 100,
+        "error": false,
+        "numsubpods": 1,
+        "subpods": [
+          { "title": "", "plaintext": "d/dx(x^3) at x = 2" }
+        ]
+      },
+      {
+        "title": "Result",
+        "scanner": "Derivative",
+        "id": "Result",
+        "position": 200,
+        "error": false,
+        "primary": true,
+        "numsubpods": 1,
+        "subpods": [
+          {
+            "title": "Possible derivation",
+            "plaintext": "d/dx(x^3)\n= 3 x^2\nAt x = 2:  3 (2)^2 = 12"
+          }
+        ]
+      },
+      {
+        "title": "Plots",
+        "scanner": "Plot",
+        "id": "Plot",
+        "position": 300,
+        "error": false,
+        "numsubpods": 1,
+        "subpods": [
+          { "title": "", "plaintext": "" }
+        ]
+      }
+    ]
+  }
+}
