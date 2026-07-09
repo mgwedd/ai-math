@@ -272,6 +272,17 @@ input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
 .lab-intro b,.lab-intro strong{color:var(--ink)}
 .lab-intro code{font-family:var(--mono);background:var(--card2);padding:2px 6px;border-radius:5px;font-size:.9em;color:#aee8ff}
 
+/* ===== "See it first" exposition gallery (Learn step) ===== */
+.expo-set{display:flex;flex-direction:column;gap:16px}
+.expo{margin:0;background:var(--bg2);border:1px solid rgba(255,255,255,.08);border-radius:12px;
+  padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.expo-title{font-weight:800;font-size:14px;color:var(--ink);letter-spacing:.2px}
+.expo-stage{width:100%}
+.expo-stage .canvas-wrap{cursor:default}
+.expo-cap{font-size:13px;line-height:1.6;color:var(--muted)}
+.expo-cap b{color:#b9a8ff}
+.expo-cap code{font-family:var(--mono);background:var(--card2);padding:2px 6px;border-radius:5px;font-size:.9em;color:#aee8ff}
+
 /* ===== Predict-then-verify gate ===== */
 .predict{background:var(--bg2);border:1px solid rgba(124,92,255,.35);border-left:3px solid var(--accent);
   border-radius:12px;padding:14px 16px;margin-bottom:16px;animation:expand .3s ease-out}
