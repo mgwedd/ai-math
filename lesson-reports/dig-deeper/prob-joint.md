@@ -1,0 +1,30 @@
+# prob-joint — Joint, Marginal & Conditional
+
+## Dig Deeper appendix (curated — graduate-authoritative)
+
+### Read
+
+- [MIT 18.05 Reading 7a: Joint Distributions, Independence](https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/mit18_05_s22_class07-prep-a.pdf) — Free PDF from MIT's Introduction to Probability and Statistics (Spring 2022, Orloff & Kamrin). Covers discrete and continuous joint distributions, marginal PDFs/PMFs, joint CDFs, and independence — all with worked examples at the right level of formality for a master's student. Confirmed live (169 kB PDF directly served by ocw.mit.edu).
+- [Bertsekas & Tsitsiklis — Introduction to Probability, 2nd ed. (MIT OCW)](https://ocw.mit.edu/courses/res-6-012-introduction-to-probability-spring-2018/d973b10c2587781f86ca4f2aff49098f_MITRES_6_012S18_Textbook.pdf) — The canonical MIT probability textbook, freely distributed via OCW. Chapters 2–3 give the most authoritative discrete treatment of joint PMFs, marginalization, and conditioning; Chapter 3 extends to the continuous case. The lesson's chain-rule hint ("P(X,Y) = P(Y)·P(X|Y)") is formalized as Theorem 2.1 here.
+- [Blitzstein & Hwang — Introduction to Probability, 2nd ed. (official free PDF)](https://drive.google.com/file/d/1VmkAAGOYCTORq1wxSQqy255qLJjTNvBI/) — Harvard Stat 110's companion text; probabilitybook.net redirects here officially. Chapter 7 (Joint Distributions) covers joint, marginal, and conditional distributions with the "Story Proof" style Blitzstein is known for; its treatment of 2D LOTUS and the connection to expectations of functions of two variables goes significantly beyond the lesson. Peer-reviewed textbook, CRC Press.
+- [Goodfellow, Bengio & Courville — Deep Learning, Ch. 3: Probability and Information Theory](https://www.deeplearningbook.org/contents/prob.html) — The authoritative ML-bridge read. Section 3.5 covers marginal probability; §3.7 covers independence and conditional independence; their treatment of the joint as the object that generative models factorize ("every generative model is a joint distribution you can slice") is spelled out explicitly. Free online.
+
+### Watch
+
+- [MIT RES.6-012 Introduction to Probability — full YouTube playlist (Tsitsiklis, 2018)](https://www.youtube.com/playlist?list=PLUl4u3cNGP60hI9ATjSFgLZpbNJ7myAg6) — 200+ short video segments (most 5–12 min) from the Spring 2018 MIT course by Prof. Tsitsiklis. The "From The Joint to the Marginal" and "Joint PDFs" segments (Lecture 9 area) show the continuous-case integration on the blackboard — the same operation as the lesson's column-sum but with integrals. The most authoritative free probability video course available.
+- [Stat 110 Lecture 4: Conditional Probability (Blitzstein, stat110harvard, ~50 min)](https://www.youtube.com/watch?v=P7NE4WF8j-Q) — Harvard Stat 110 channel. Covers conditional probability from first principles, independence of events, and Bayes' rule — the theoretical backbone behind the lesson's "slice and renormalize" description. Blitzstein's vivid examples (birthday problem, prosecutor's fallacy) make the abstract definitions feel inevitable.
+
+## Science & depth recommendations (to reach master's level)
+
+- **The lesson treats marginalization and conditioning only for discrete distributions.** The continuous case — P(X = x) = ∫ f(x,y) dy and f(X|Y=y) = f(X,Y)/f_Y(y) — is exactly the machinery used in variational inference, diffusion models, and the evidence lower bound. Adding one sentence ("for continuous variables the sum becomes an integral; the intuition is identical") with a pointer to Bertsekas Ch. 3 would close this gap. Source: Bertsekas & Tsitsiklis Ch. 3; Deep Learning Book §3.5.
+- **The chain-rule go-deeper card stops at one level.** The autoregressive factorization P(x₁,…,xₙ) = ∏ P(xᵢ | x₁,…,xᵢ₋₁) — the exact identity GPT uses — should be written out. As it stands, the card says "chain it across many variables" and "GPT uses this identity, unrolled" without displaying the product. A reader who hasn't seen this notation before cannot write GPT's factorization from scratch. Source: Deep Learning Book §3.9; Blitzstein & Hwang Ch. 7.
+- **"Marginalizing is the expensive part" should name latent variable models explicitly.** The card correctly says "variational inference, MCMC, and diffusion models all exist to dodge" the intractable sum — but doesn't say *what* is being summed over. Naming latent variable models (VAE, Gaussian Mixture Models) as the canonical examples — "P(x) = ∫ P(x,z) dz and this integral over latent z is what makes maximum likelihood hard" — turns a correct observation into an actionable concept. Source: Goodfellow et al. §16.2; Blitzstein & Hwang Ch. 7.
+
+## Sources
+
+- [MIT 18.05 S22 Reading 7a: Joint Distributions, Independence](https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/mit18_05_s22_class07-prep-a.pdf) — MIT OpenCourseWare, confirmed live 169 kB PDF.
+- [Bertsekas & Tsitsiklis, Introduction to Probability 2nd ed., MIT OCW PDF](https://ocw.mit.edu/courses/res-6-012-introduction-to-probability-spring-2018/d973b10c2587781f86ca4f2aff49098f_MITRES_6_012S18_Textbook.pdf) — Canonical MIT probability textbook, officially distributed via OCW.
+- [Blitzstein & Hwang, Introduction to Probability 2nd ed. (official free PDF via probabilitybook.net)](https://drive.google.com/file/d/1VmkAAGOYCTORq1wxSQqy255qLJjTNvBI/) — Harvard Stat 110 companion text; CRC Press peer-reviewed.
+- [Deep Learning Book, Ch. 3 (Goodfellow, Bengio, Courville)](https://www.deeplearningbook.org/contents/prob.html) — MIT Press 2016; authoritative ML-probability reference, free online.
+- [MIT RES.6-012 Introduction to Probability — YouTube playlist (Tsitsiklis)](https://www.youtube.com/playlist?list=PLUl4u3cNGP60hI9ATjSFgLZpbNJ7myAg6) — MIT Spring 2018 lectures; canonical graduate-level probability course, free. High-quality explainer.
+- [Stat 110 Lecture 4: Conditional Probability (stat110harvard, YouTube)](https://www.youtube.com/watch?v=P7NE4WF8j-Q) — Harvard University; high-quality explainer.

@@ -1,0 +1,30 @@
+# pre-slope — Slope & Fitting Lines
+
+## Dig Deeper appendix (curated — graduate-authoritative)
+
+### Read
+- [Simple Linear Regression (Wikipedia)](https://en.wikipedia.org/wiki/Simple_linear_regression) — The canonical reference for the closed-form OLS slope formula m = cov(x,y)/var(x) and intercept b = ȳ − m·x̄, the through-the-mean property, and why residuals are measured vertically (errors-in-y assumption). The lesson promises a "one-shot" normal equation but never gives the formula — this fills that gap.
+- [MIT 18.06 Lecture 16: Projection Matrices and Least Squares (OCW)](https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/resources/lecture-16-projection-matrices-and-least-squares/) — Gilbert Strang's graduate-level treatment of least squares as projection onto the column space: the geometric picture behind the normal equation XᵀXw = Xᵀy. Establishes the algebraic foundation the lesson's "bowl" and "one-shot solution" language points toward. Authoritative (MIT 18.06, canonical text).
+- [Least Squares (Wikipedia)](https://en.wikipedia.org/wiki/Least_squares) — History (Gauss ~1795, Legendre 1805), the vertical-vs-perpendicular residual choice, and why the lesson's framing of OLS as "the first ML model" is an overstatement. Essential for the Gaussian-noise/MLE probabilistic justification the lesson's deeper card mentions but never delivers.
+
+### Watch
+- [StatQuest: Fitting a Line to Data (Least Squares)](https://www.youtube.com/watch?v=PaFPbb66DxQ) (StatQuest/Josh Starmer, ~9 min) — Step-by-step visual derivation of the sum-of-squared-residuals objective, rotating the line to minimize it, and why squaring (vs. absolute value) is the natural choice. Highly complementary to the lesson's hands-on lab; Starmer's clarity makes the "why squared" motivation stick.
+- [Gradient Descent, Step-by-Step](https://www.youtube.com/watch?v=sDv4f4s2SB8) (StatQuest/Josh Starmer, ~24 min) — Starts from the loss bowl introduced in the lesson and derives gradient descent's update rule concretely, covering stochastic gradient descent and step-size selection. The best-in-class explainer for the "finding the bowl's bottom automatically" teaser the lesson ends on.
+- [MIT 18.06 Lecture 16: Projection Matrices and Least Squares](https://www.youtube.com/watch?v=osh80YCg_GM) (MIT OCW/Gilbert Strang, ~48 min) — Full lecture showing least squares as projection; completes the algebraic picture the lesson only sketches. For learners ready to move from "bowl" intuition to the normal equation proof.
+
+## Science & depth recommendations (to reach master's level)
+
+- **Missing closed-form formulas** → The lesson says the normal equation gives a "one-shot" solution but never shows it. Add the scalar formulas: m = cov(x,y)/var(x) = Σ(xᵢ−x̄)(yᵢ−ȳ)/Σ(xᵢ−x̄)² and b = ȳ − m·x̄. These demonstrate that the line always passes through (x̄, ȳ) — the data's center of mass. Grounded in [Wikipedia: Simple Linear Regression](https://en.wikipedia.org/wiki/Simple_linear_regression).
+- **Squaring is principled, not just convenient** → The deeper card lists mechanical reasons for squaring (no cancellation, penalize large misses, clean derivative) but omits the real justification: minimizing SSE is exactly maximum-likelihood estimation under i.i.d. Gaussian noise. This is why squared error is the default, and why it over-reacts to outliers (Gaussian tails are thin). Add a sentence or card on the Gaussian/MLE story; it bridges directly to the probability world later. Grounded in [Wikipedia: Least Squares](https://en.wikipedia.org/wiki/Least_squares).
+- **Vertical residuals are a modeling choice, not the only option** → The lab correctly draws vertical residuals (OLS), but never names this as a choice. OLS minimizes errors in y only, making regression of y-on-x asymmetric with x-on-y. Total least squares / orthogonal regression minimizes perpendicular distance and is used when both variables have measurement error. One sentence of foreshadowing prevents a durable misconception. Grounded in [Wikipedia: Total Least Squares](https://en.wikipedia.org/wiki/Total_least_squares).
+- **Loss is a 2-D bowl, not a 1-D curve** → The loss lab fixes b and shows a parabolic cross-section. The true loss E(m,b) is an elliptic paraboloid over the (m,b) plane. Without seeing this, the jump from "two knobs" to "millions of knobs" is unmotivated. Add a contour-heatmap view or at least a verbal pointer to the 3-D picture. Grounded in the normal-equation geometry in [MIT 18.06 Lecture 16](https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/resources/lecture-16-projection-matrices-and-least-squares/).
+- **Historical overstatement: "first ML model ever"** → Least squares predates "machine learning" by ~150 years (Gauss ~1795, Legendre 1805). Replace with "the oldest and simplest supervised-learning model." Grounded in [Wikipedia: Least Squares](https://en.wikipedia.org/wiki/Least_squares).
+
+## Sources
+- [Wikipedia: Simple Linear Regression](https://en.wikipedia.org/wiki/Simple_linear_regression) — canonical text, closed-form slope cov/var, through-the-mean property, uniqueness
+- [Wikipedia: Least Squares](https://en.wikipedia.org/wiki/Least_squares) — canonical text, history (Legendre/Gauss), residual cancellation, Gaussian/MLE justification
+- [Wikipedia: Total Least Squares](https://en.wikipedia.org/wiki/Total_least_squares) — canonical text, vertical vs. perpendicular residuals, OLS asymmetry
+- [MIT 18.06 Lecture 16: Projection Matrices and Least Squares (OCW)](https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/resources/lecture-16-projection-matrices-and-least-squares/) — MIT 18.06, canonical course, geometric projection view of least squares
+- [MIT 18.06 Lecture 16 (YouTube)](https://www.youtube.com/watch?v=osh80YCg_GM) — MIT OCW / Gilbert Strang, same lecture on YouTube
+- [StatQuest: Fitting a Line to Data](https://www.youtube.com/watch?v=PaFPbb66DxQ) — high-quality explainer, StatQuest/Josh Starmer
+- [StatQuest: Gradient Descent, Step-by-Step](https://www.youtube.com/watch?v=sDv4f4s2SB8) — high-quality explainer, StatQuest/Josh Starmer
