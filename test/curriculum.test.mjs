@@ -7,6 +7,7 @@
    ids — before they ship. */
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import katex from 'katex';
+import { readFileSync, readdirSync } from 'node:fs';
 
 // --- browser-global stubs: must exist BEFORE the curriculum imports. This is
 //     insurance against a stray top-level DOM reference sneaking in. ---
@@ -457,7 +458,16 @@ describe('display formulas render as valid KaTeX (math accuracy regression guard
   // strong sign it's still raw Unicode notation rather than converted KaTeX.
   const MATH_HINT_RE = /[·‖ᵀ√Σ∏∈∞±≥≤≠≈λμσθδΔρη→←↦⟂⊥×∫∂∇]|<su[bp]>/;
   // Genuine code/API identifiers that are correctly left as plain <code>, not math.
-  const CODE_NOT_MATH = new Set(['+=', 'for', 'ddof', 'var', 'nn.CrossEntropyLoss', 'sparse_categorical_crossentropy', 'numpy.linalg.lstsq']);
+  const CODE_NOT_MATH = new Set(['+=', 'for', 'ddof', 'var', 'nn.CrossEntropyLoss', 'sparse_categorical_crossentropy', 'numpy.linalg.lstsq', 'linalg.solve(A, b)']);
+  // A bracketed number list ("[6, 8]", "[[2,0],[0,1]]") is math even with no
+  // Unicode operator character — this is what MATH_HINT_RE alone missed in
+  // lib/curriculum/la-core-labs.js's predict prompts (e.g. "v = [6, 8]").
+  const BRACKET_VECTOR_RE = /\[[-\d.,\s]+\]/;
+  const LETTER_EQUALS_BRACKET_RE = /^[a-zA-Z]\w*\s*=\s*\[/;
+  function looksLikeMath(content) {
+    if (CODE_NOT_MATH.has(content)) return false;
+    return MATH_HINT_RE.test(content) || BRACKET_VECTOR_RE.test(content) || LETTER_EQUALS_BRACKET_RE.test(content);
+  }
 
   it('every inline \\(...\\) span parses as valid KaTeX with no stray control characters', () => {
     const bad = [];
@@ -488,8 +498,30 @@ describe('display formulas render as valid KaTeX (math accuracy regression guard
       let m;
       CODE_RE.lastIndex = 0;
       while ((m = CODE_RE.exec(html))) {
-        if (CODE_NOT_MATH.has(m[1])) continue;
-        if (MATH_HINT_RE.test(m[1])) bad.push(`${where}: <code>${m[1].slice(0, 60)}</code>`);
+        if (looksLikeMath(m[1])) bad.push(`${where}: <code>${m[1].slice(0, 60)}</code>`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  // Authored math also lives OUTSIDE the LESSONS data the tests above walk:
+  // interactive labs (INTERACTIVES.xxx = function(stage, api){...}) pass HTML
+  // straight to api.predict()/api.missions() as function-call arguments,
+  // never touching a lesson's learn/ml/deeper/labs/quiz fields. That's
+  // exactly how lib/curriculum/la-core-labs.js shipped 12 unconverted
+  // vector/matrix <code> spans unnoticed. Sweep every curriculum file's raw
+  // source text directly so authoring location can never hide a <code> span
+  // from this guard again.
+  it('no <code> span anywhere in lib/curriculum/*.js source carries raw math notation', () => {
+    const dir = new URL('../lib/curriculum/', import.meta.url);
+    const bad = [];
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.js')) continue;
+      const text = readFileSync(new URL(file, dir), 'utf8');
+      CODE_RE.lastIndex = 0;
+      let m;
+      while ((m = CODE_RE.exec(text))) {
+        if (looksLikeMath(m[1])) bad.push(`${file}: <code>${m[1].slice(0, 60)}</code>`);
       }
     }
     expect(bad).toEqual([]);
@@ -577,5 +609,15 @@ describe('type-aware quiz-shape validation (numeric + order)', () => {
     expect(withSpy({ quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] })).toBe(false);
     expect(withSpy({ quiz: [{ q: '?', opts: ['a', 'b'], a: 5 }] })).toBe(true);
     expect(withSpy({ quiz: [{ type: 'mc', q: '?', opts: ['a'], a: 0 }] })).toBe(true);
+  });
+
+  // Optional `wolfram` Show-Steps hint (KB PR 4): a non-empty string when present.
+  it('accepts an optional `wolfram` hint that is a non-empty string', () => {
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, why: 'x', wolfram: 'derivative of x^3 at x = 2' }] })).toBe(false);
+  });
+
+  it('rejects a `wolfram` hint that is not a non-empty string', () => {
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, wolfram: '' }] })).toBe(true);
+    expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, wolfram: 42 }] })).toBe(true);
   });
 });
