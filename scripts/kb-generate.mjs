@@ -226,7 +226,6 @@ function numberFromPods(pods) {
 async function wolframOk(candidate, appId) {
   const check = candidate.wolfram_check;
   if (!check || !check.query) return { match: false, reason: 'no wolfram_check' };
-  const parsed = wolfram.parse ? null : null; // (parse used inside fetch)
   const payload = await wolfram.fetch(check.query, { appId });
   const got = numberFromPods(payload.pods);
   const want = Number(check.answer);
