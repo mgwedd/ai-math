@@ -47,31 +47,34 @@ in `lesson-reports/` (web-grounded audit; chip away between increments).
   clean, and inline feedback is well-formed — wired to a pre-push hook and a
   GitHub Actions matrix (Node 22/24).
 
-### In flight (open PRs this wave — KB pipeline + MS-gap closure)
+### In flight (this wave — KB pipeline + MS-gap closure)
 
-**Knowledge-base pipeline** (docs/KNOWLEDGE-BASE-PLAN.md; all seven complete
-& CI-green). Merge in dependency order **#33 → #55 → #53 → #54 → {#56, #57}
-→ #58 → #59 → #60**, retargeting each stacked PR to main as its parent lands:
-- #53 concept registry (the KB spine) · #54 answer telemetry · #56 service
-  layer (Wikipedia/Wolfram adapters + cache) · #57 parameterized generators ·
-  #58 enrichment UI · #59 practice surface + LLM→verify pipeline · #60
-  hardening & evergreen loop.
-- The four migrations (#54/#56/#59/#60) were applied and smoke-tested against
-  a real local Postgres 16 in merge order; apply to the live DB at merge
-  time. Post-merge follow-up: wire the kb-steps rate cap into #58's route
-  (one line; documented in #60's runbook).
-- Also open: #33 Next 16 bump (merge first — carries High-severity security
-  fixes; build green) · #55 KaTeX pass on la-core-labs · #52 World 2
-  challenge labs (branch updated to current main).
+**Knowledge-base pipeline** (docs/KNOWLEDGE-BASE-PLAN.md) — **PRs 1–5 are on
+main**: #53 concept registry (the KB spine) · #54 answer telemetry · #56
+service layer (Wikipedia/Wolfram adapters + cache) · #57 parameterized
+generators · #58 enrichment UI, alongside #55 KaTeX pass on la-core-labs and
+#52 World 2 challenge labs. The `kb_cache` + `answer_telemetry` migrations
+ride with them (smoke-tested against local Postgres 16; apply to the live DB
+at deploy time).
+- **Remaining to land on main**: #59 practice surface + LLM→verify pipeline
+  and #60 hardening & evergreen loop merged into the stacked
+  `claude/kb-integration` lineage (2026-07-09) but are **not on main yet** —
+  final step is merging that integration branch to main (brings the
+  `question_bank` + `kb_usage` migrations with it).
+- Post-merge follow-up (unchanged): wire the kb-steps rate cap into the
+  now-merged #58 route (one line; documented in #60's runbook).
+- Still open: #33 Next 16 bump — carries High-severity security fixes;
+  merge ASAP (build green).
 
-**MS-gap closure wave** (per CURRICULUM-REVIEW.md; one module per PR):
+**MS-gap closure wave** (per CURRICULUM-REVIEW.md; one module per PR — all
+open, CI green):
 - #61 research depth-pass — 10 audit items applied across existing lessons
 - #62 `ml-unsupervised` — k-means · GMM/EM · PCA (3 lessons)
 - #63 `ml-conv` — convolution & CNN feature hierarchies (2 lessons)
 - #64 `ml-kernels` — max-margin/SVM geometry · the kernel trick (2 lessons)
 - #65 `proofs` — proof-literacy micro-course (4 lessons; the P1 item)
-- `rl.js` — MDPs/value iteration · Q-learning · policy gradients→RLHF bridge
-  (3 lessons; PR pending)
+- #67 `rl` — MDPs/value iteration · Q-learning · policy gradients→RLHF
+  bridge (3 lessons)
 The nine dig-deeper research-report PRs (#40–48) are merged; their remaining
 recommendations landed as #61.
 
