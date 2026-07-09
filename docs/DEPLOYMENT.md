@@ -96,6 +96,129 @@ when the URL contains an `sslmode`, or `DATABASE_SSL_CA` is set, or
 | --- | --- | --- |
 | `PG_POOL_MAX` | `1` on Vercel, `10` otherwise | Per-instance pool cap. Keep it small (1) on serverless — each function instance holds its own pool and the pooler multiplexes across them. |
 | `DEV_AUTH` | unset | `DEV_AUTH=1` bypasses Supabase auth with a fixed dev identity. **Hard-disabled when `VERCEL` is set** — never trusted in production. Local docker-compose only. |
+| `WOLFRAM_APP_ID` | unset | **Optional** knowledge-base enrichment key (server-side only). When set, `GET /api/kb/concept/[slug]` adds cached Wolfram\|Alpha pods to concept cards. Free non-commercial AppID: https://developer.wolframalpha.com/. |
+
+### Knowledge-base enrichment is optional (zero keys required)
+
+The KB layer (`lib/kb/`, `GET /api/kb/concept/[slug]`) is **purely additive and
+degrades gracefully**. With **no keys at all** the app behaves exactly as
+before: Wikipedia summaries (the REST `page/summary` endpoint needs no key) and
+registry-derived "related concepts" still render, and any Wolfram field is
+simply omitted. Set `WOLFRAM_APP_ID` to add computed/verification pods. An
+upstream outage or rate-limit never surfaces an error — responses fall back to
+the long-lived `kb_cache` (serve-stale) or drop the field. All keys stay
+server-side; the browser never talks to a wellspring directly.
+
+## Knowledge base operations
+
+The full plan is [`docs/KNOWLEDGE-BASE-PLAN.md`](./KNOWLEDGE-BASE-PLAN.md); this
+section is the maintainer-facing operator runbook for the pieces that need a
+human (or a scheduled job) to run something — the generate → verify → promote
+loop that keeps the question bank (`question_bank`) evergreen, and the per-user
+rate caps that protect the KB routes. None of this is required to run the app:
+every knob below is optional and the app/tests/build all work with zero keys.
+
+### Env vars at a glance
+
+| Variable | Used by | Default | Notes |
+| --- | --- | --- | --- |
+| `WOLFRAM_APP_ID` | `GET /api/kb/concept/[slug]`, `kb:generate` | unset | Server-side only. Enrichment pods when set; also the Wolfram recompute gate in the generation pipeline. Free non-commercial AppID: https://developer.wolframalpha.com/. |
+| `ANTHROPIC_API_KEY` | `kb:generate` (maintainer script only) | unset | Never read by the running app/routes — only the batch generation script. Required for a LIVE `kb:generate` run; **not** required for `--dry-run`. |
+| `KB_GENERATE_MODEL` | `kb:generate` | a current mid-tier Claude model | Lets you tune generation cost/quality without a code change. |
+| `KB_AUTO_PROMOTE_MIN_VERIFIED` | `kb:promote --auto` | `5` | Minimum qualifying verified items a concept needs before auto-promote touches it. |
+| `KB_AUTO_PROMOTE_REQUIRE_MATCH` | `kb:promote --auto` | `true` | When true, only verified items whose stored `verification.match === true` count toward the threshold / get promoted. |
+| `KB_CONCEPT_DAILY_CAP` | `GET /api/kb/concept/[slug]` | `300`/user/day | Per-user daily cap; see "Rate caps" below. |
+| `KB_STEPS_DAILY_CAP` | `POST /api/kb/steps` (when that route lands) | `200`/user/day | Same cap mechanism, pre-wired for the Show Steps route. |
+| `PRACTICE_DAILY_CAP` | `GET /api/practice` | `100`/user/day | Same mechanism for the practice-set route. |
+| `KB_RATE_LIMIT_DEFAULT_CAP` | any KB route not listed above | `300`/user/day | Fallback used by `lib/kb/rate-limit.js` for a route with no specific env var. |
+
+### The generate → verify → promote loop
+
+1. **Generate** (`npm run kb:generate`) runs the §8 pipeline: pick target
+   concepts (global miss-rate + a coverage floor), pull a Wikipedia summary +
+   exemplar questions, have Claude author candidates in the exact engine
+   question schema, run the shared schema validator, recompute every claim
+   through Wolfram|Alpha, dedup against the static pool + existing bank rows,
+   and insert survivors as `question_bank.status = 'verified'`.
+   - `npm run kb:generate -- --dry-run` runs the **whole plan with zero keys
+     and zero network** — it prints the target concepts and the exact
+     per-concept prompts, then stops. Good for sanity-checking targeting
+     before spending API calls.
+   - `npm run kb:generate -- --dry-run --concept=<slug>` to preview one concept.
+   - A LIVE run needs `ANTHROPIC_API_KEY` (and `WOLFRAM_APP_ID` — without it
+     every mc/numeric candidate is dropped at the Wolfram gate) and a reachable
+     `DATABASE_URL`/`POSTGRES_URL`.
+2. **Review** (`npm run kb:promote`, no flags — the default is a read-only
+   list) prints every `verified` row: id, concept, qtype, source, a stem
+   snippet, and the stored verification (Wolfram query/answer/match). Nothing
+   is written in this mode.
+   - `npm run kb:promote -- --concept=<slug>` to scope the review to one concept.
+3. **Promote or retire** a specific item once you've eyeballed it:
+   - `npm run kb:promote -- --promote=<uuid>` flips one `verified` row to `live`
+     (the status the serving routes actually read).
+   - `npm run kb:promote -- --retire=<uuid>` pulls any row (any status) to
+     `retired` instantly — the fix for a bad item that slipped through, since
+     every `quiz_answers.question_key` makes its blast radius auditable.
+4. **Auto-promote** (`npm run kb:promote -- --auto`, **off by default** —
+   nothing is auto-promoted unless you pass `--auto`) is a conservative trust
+   policy: once a concept has `>= KB_AUTO_PROMOTE_MIN_VERIFIED` (default 5)
+   verified items whose Wolfram verification actually matched
+   (`verification.match === true`, unless `KB_AUTO_PROMOTE_REQUIRE_MATCH=false`),
+   *all* of that concept's qualifying verified items are promoted to `live` in
+   one pass. `--limit=<n>` caps how many rows a single run will change, so a
+   first pass against a large backlog can be applied incrementally.
+   - Both scripts support `--dry-run`, which for `kb:promote` means **no DB
+     connection is ever opened** (not just no writes) — it prints the plan
+     (query filters, thresholds, or the single UPDATE it would run) and exits.
+
+### Rate caps on the KB routes
+
+The app is serverless — many concurrent function instances, no shared memory —
+so a per-user daily cap needs a **durable** counter, not an in-process one.
+Migration `20260707140000_kb_usage.sql` adds `kb_usage (user_id, day, route,
+count)`, a server-only table (RLS enabled, no policies — same shape as
+`kb_cache`/`question_bank`; the app's pg role owns it and bypasses RLS).
+`lib/kb/rate-limit.js` increments the row for `(user, today, route)` on every
+request and compares it to that route's cap (table above).
+
+- Over cap → the route returns **`429`** with a coarse `{ code: 'RATE_LIMIT' }`
+  body, the same coarse-code convention as the `DB_CONN`/`DB_QUERY` codes
+  documented below.
+- Wired into `GET /api/kb/concept/[slug]` (route `kb-concept`) and
+  `GET /api/practice` (route `practice`). `POST /api/kb/steps` (route
+  `kb-steps`) is pre-wired in `lib/kb/rate-limit.js` — that route ships in the
+  enrichment-UI PR; when it lands, call `checkRateLimit({ userId, route:
+  'kb-steps', ... })` the same way the other two routes do.
+- **Fails OPEN, always**: if the usage table isn't migrated yet or a query
+  fails for any reason, `checkRateLimit` logs the error (via the same
+  `logRouteError` convention as every other route) and returns `allowed: true`
+  — a rate limiter must never turn an infra blip into an outage for every user.
+  This mirrors `lib/kb/cache.js`'s serve-stale-on-error philosophy.
+- Caps are intentionally generous defaults (hundreds of requests/user/day) —
+  they exist to blunt a runaway client or scraping, not to throttle normal use.
+
+### Scheduled top-up
+
+`.github/workflows/kb-topup.yml` runs `npm run kb:generate` then
+`npm run kb:promote -- --auto` on a monthly cron (`workflow_dispatch` also
+available for an on-demand run). It reads `ANTHROPIC_API_KEY`, `WOLFRAM_APP_ID`,
+and `DATABASE_URL` from **repository secrets** — set all three (Settings →
+Secrets and variables → Actions) to enable it.
+
+**No-ops gracefully without secrets:** the job has a job-level
+`if: secrets.ANTHROPIC_API_KEY != '' && secrets.WOLFRAM_APP_ID != '' &&
+secrets.DATABASE_URL != ''` — on a fork, or in this repo before an operator
+configures the secrets, the job is **skipped**, not failed. This is on top of
+(not instead of) the fact that both scripts are independently keyless-safe via
+`--dry-run`, and CI's own `test`/`build` jobs never touch either secret.
+
+### Open item carried from the plan (§12)
+
+**Wolfram ToS**: whether "free product, non-commercial project" qualifies for
+the Wolfram|Alpha free tier long-term is still an open question — flagged, not
+blocking. All Wolfram calls are isolated behind the `lib/kb/sources/wolfram.js`
+adapter, so if the answer turns out to be "no," the fix is a config/billing
+change (a paid AppID), not an architecture change.
 
 ## Troubleshooting a 500 on `/api/state`
 
