@@ -1,0 +1,47 @@
+{
+  "queryresult": {
+    "success": true,
+    "error": false,
+    "numpods": 3,
+    "datatypes": "Vector",
+    "timing": 0.412,
+    "version": "2.6",
+    "inputstring": "dot product of (2,3) and (4,-1)",
+    "pods": [
+      {
+        "title": "Input",
+        "scanner": "Identity",
+        "id": "Input",
+        "position": 100,
+        "error": false,
+        "numsubpods": 1,
+        "subpods": [
+          { "title": "", "plaintext": "(2, 3)·(4, -1)" }
+        ]
+      },
+      {
+        "title": "Result",
+        "scanner": "Vector",
+        "id": "Result",
+        "position": 200,
+        "error": false,
+        "primary": true,
+        "numsubpods": 1,
+        "subpods": [
+          { "title": "", "plaintext": "5" }
+        ]
+      },
+      {
+        "title": "Vectors",
+        "scanner": "Vector",
+        "id": "Vectors",
+        "position": 300,
+        "error": false,
+        "numsubpods": 1,
+        "subpods": [
+          { "title": "", "plaintext": "" }
+        ]
+      }
+    ]
+  }
+}
