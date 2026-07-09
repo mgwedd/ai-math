@@ -14,7 +14,12 @@
 
    Only status='live' bank rows are ever served. Degrades gracefully: if the
    bank query fails (e.g. table not migrated yet), practice still serves
-   ref+template descriptors — the static curriculum is untouched. */
+   ref+template descriptors — the static curriculum is untouched.
+
+   Per-user daily rate cap (PR 7, docs/KNOWLEDGE-BASE-PLAN.md §10): practice
+   sets are cheap to compute but still bounded per user per day
+   (lib/kb/rate-limit.js). Over-cap => 429. FAILS OPEN: a rate-limiter infra
+   error never blocks a practice request. */
 import { NextResponse } from 'next/server';
 import { pool, logRouteError } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth-server';
@@ -23,6 +28,7 @@ import '@/lib/curriculum/index.js'; // side-effect: register every lesson into L
 import { CONCEPTS, getConcept, resolveTag } from '@/lib/curriculum/concepts.js';
 import { GENERATORS } from '@/lib/curriculum/generators/index.js';
 import { buildPracticeQueue } from '@/lib/practice/selection.js';
+import { checkRateLimit } from '@/lib/kb/rate-limit.js';
 
 // Lesson refs (lessonId:qi) that teach a given concept, resolved through the
 // canonical tag registry. Memoized once per process — the curriculum is static.
@@ -59,6 +65,15 @@ function gensByConcept() {
 export async function GET() {
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  const rl = await checkRateLimit({
+    userId: user.id,
+    route: 'practice',
+    onError: (e) => logRouteError('/api/practice', 'GET', user.id, e),
+  });
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'daily practice limit reached', code: 'RATE_LIMIT' }, { status: 429 });
+  }
 
   try {
     // The learner's per-concept accuracy (PR 2 view). Weakest first is not
