@@ -22,6 +22,7 @@ import { logRouteError, readJson } from '@/lib/db';
 import { getAuthUser } from '@/lib/auth-server';
 import { wolframAppId } from '@/lib/kb/sources/wolfram.js';
 import { buildStepsBundle } from '@/lib/kb/index.js';
+import { checkRateLimit } from '@/lib/kb/rate-limit.js';
 // Importing the curriculum index runs its registerLesson() side effects, so
 // LESSONS is populated when we resolve a question_key -> `wolfram` hint.
 import '@/lib/curriculum/index.js';
@@ -61,6 +62,17 @@ export async function POST(req) {
   const questionKey = body && body.question_key;
   const hint = hintForQuestionKey(questionKey);
   if (!hint) return NextResponse.json({ error: 'no steps for this question' }, { status: 404 });
+
+  // Per-user daily cap on the Wolfram-hitting path (PR 7 pre-wired this once the
+  // steps route from PR 4 landed). Fails open on any store error.
+  const rl = await checkRateLimit({
+    userId: user.id,
+    route: 'kb-steps',
+    onError: (e) => logRouteError('/api/kb/steps', 'POST', user.id, e),
+  });
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'daily steps limit reached', code: 'RATE_LIMIT' }, { status: 429 });
+  }
 
   try {
     const bundle = await buildStepsBundle(hint);
