@@ -47,34 +47,38 @@ in `lesson-reports/` (web-grounded audit; chip away between increments).
   clean, and inline feedback is well-formed — wired to a pre-push hook and a
   GitHub Actions matrix (Node 22/24).
 
-### In flight (this wave — KB pipeline + MS-gap closure)
+### In flight (this wave — MS-gap closure endgame)
 
-**Knowledge-base pipeline** (docs/KNOWLEDGE-BASE-PLAN.md) — **PRs 1–5 are on
-main**: #53 concept registry (the KB spine) · #54 answer telemetry · #56
-service layer (Wikipedia/Wolfram adapters + cache) · #57 parameterized
-generators · #58 enrichment UI, alongside #55 KaTeX pass on la-core-labs and
-#52 World 2 challenge labs. The `kb_cache` + `answer_telemetry` migrations
-ride with them (smoke-tested against local Postgres 16; apply to the live DB
-at deploy time).
-- **Remaining to land on main**: #59 practice surface + LLM→verify pipeline
-  and #60 hardening & evergreen loop merged into the stacked
-  `claude/kb-integration` lineage (2026-07-09) but are **not on main yet** —
-  final step is merging that integration branch to main (brings the
-  `question_bank` + `kb_usage` migrations with it).
-- Post-merge follow-up (unchanged): wire the kb-steps rate cap into the
-  now-merged #58 route (one line; documented in #60's runbook).
-- Still open: #33 Next 16 bump — carries High-severity security fixes;
-  merge ASAP (build green).
+**Knowledge-base pipeline — COMPLETE, all seven PRs on main** (docs/
+KNOWLEDGE-BASE-PLAN.md): #53 concept registry · #54 answer telemetry · #56
+service layer · #57 parameterized generators · #58 enrichment UI · #70
+(landed PR 6 practice surface + PR 7 hardening/evergreen loop together),
+plus #55 KaTeX pass, #52/#68/#69 challenge-lab passes, and #71 (registered
+the conv/CNN concepts #63 needed). All four migrations (`kb_cache`,
+`answer_telemetry`, `question_bank`, `kb_usage`) are in the tree — apply to
+the live DB at deploy time. The kb-steps rate cap from #60's runbook is
+wired.
 
-**MS-gap closure wave** (per CURRICULUM-REVIEW.md; one module per PR — all
-open, CI green):
-- #61 research depth-pass — 10 audit items applied across existing lessons
-- #62 `ml-unsupervised` — k-means · GMM/EM · PCA (3 lessons)
-- #63 `ml-conv` — convolution & CNN feature hierarchies (2 lessons)
-- #64 `ml-kernels` — max-margin/SVM geometry · the kernel trick (2 lessons)
-- #65 `proofs` — proof-literacy micro-course (4 lessons; the P1 item)
-- #67 `rl` — MDPs/value iteration · Q-learning · policy gradients→RLHF
-  bridge (3 lessons)
+**Standing rule the registry created**: `validateLessonTags()` now gates CI
+— every new lesson's `q.tag` must resolve to a registered concept in
+`lib/curriculum/concepts.js` (directly or via `TAG_ALIASES`). New-module
+PRs must ship their concept registrations in the same PR.
+
+**MS-gap closure wave** (per CURRICULUM-REVIEW.md): #63 `ml-conv` is
+merged. Open PRs — each refreshed with current main + its concept
+registrations, all 189 tests green on the combined tree. Safe merge order
+(verified by sequential merge simulation):
+1. #33 Next 16 bump — High-severity security fixes; merges clean
+2. #61 research depth-pass — 10 audit items; the c-graddesc card was
+   re-merged around #52's labs restructure
+3. #62 `ml-unsupervised` — k-means · GMM/EM · PCA (3 lessons)
+4. #64 `ml-kernels` — max-margin/SVM geometry · the kernel trick (2 lessons)
+5. #65 `proofs` — proof-literacy micro-course (4 lessons; the P1 item)
+6. #67 `rl` — MDPs/value iteration · Q-learning · policy gradients→RLHF (3
+   lessons)
+Steps 5–6 will show a trivial one-hunk `index.js` conflict at merge time
+(both append an import after `ml-kernels.js`) — keep both lines, or merge
+main into the branch first.
 The nine dig-deeper research-report PRs (#40–48) are merged; their remaining
 recommendations landed as #61.
 
@@ -163,8 +167,9 @@ defines LLM training.
 
 Shipped: numerics for ML (`numerics.js`, #39) · info-theory bridge
 (`info-theory.js`, #38) · Markov chains (`markov.js`, #36) · positive
-definiteness (`posdef.js`, #37). In flight: proof-writing micro-course
-(#65) · clustering/EM, PCA, kernels/SVM, CNNs, RL (see wave above).
+definiteness (`posdef.js`, #37) · CNNs (`ml-conv.js`, #63). In flight:
+proof-writing micro-course (#65) · clustering/EM, PCA, kernels/SVM, RL
+(see wave above).
 
 Remaining:
 - **Backlog labs** from `lesson-reports/README.md`: ill-conditioned-bowl GD
