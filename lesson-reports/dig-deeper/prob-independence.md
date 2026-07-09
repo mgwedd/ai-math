@@ -1,0 +1,30 @@
+# prob-independence — Independence & Conditional Independence
+
+## Dig Deeper appendix (curated — graduate-authoritative)
+
+### Read
+
+- [MIT 18.05 Reading 7a: Joint Distributions, Independence](https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/mit18_05_s22_class07-prep-a.pdf) — Free MIT PDF (Spring 2022). The independence section formalizes P(X,Y) = P(X)·P(Y) for both discrete and continuous cases, defines mutual vs. pairwise independence for more than two variables (a distinction the lesson omits), and gives the connection to conditional distributions. Directly extends the lesson's "rank-1 table" picture into the continuous domain. Confirmed live PDF.
+- [Blitzstein & Hwang — Introduction to Probability, 2nd ed., Ch. 2 & 7](https://drive.google.com/file/d/1VmkAAGOYCTORq1wxSQqy255qLJjTNvBI/) — Harvard Stat 110 companion text (official free PDF via probabilitybook.net). Chapter 2 contains the sharpest printed treatment of pairwise vs. mutual independence (with a classic counterexample). Chapter 7 generalizes to random variables. Blitzstein's discussion of colliders ("explaining away") in the context of conditional independence is the clearest prose treatment of the lesson's collider card. CRC Press.
+- [Goodfellow, Bengio & Courville — Deep Learning, Ch. 3, §3.7–3.8](https://www.deeplearningbook.org/contents/prob.html) — The ML-facing treatment. §3.7 covers independence and conditional independence; §3.8 explains why conditional independence is the structural backbone of probabilistic graphical models and modern generative models. The lesson's claim that "a transformer's attention is deciding which tokens it can treat as conditionally independent given the context" finds its formal grounding here. Free online.
+- [Koller & Friedman — Probabilistic Graphical Models, Ch. 2](https://books.google.com/books/about/Probabilistic_Graphical_Models.html?id=7dzpHCHzNQ4C) — MIT Press 2009; the graduate-authoritative textbook on graphical models. Formalizes how conditional independence maps to graph structure via d-separation — the theory behind the lesson's "Naive Bayes = conditional independence assumption" and "graphical models ARE a map of conditonal independencies." Canonical peer-reviewed reference.
+
+### Watch
+
+- [Stat 110 Lecture 4: Conditional Probability (Blitzstein, stat110harvard, ~50 min)](https://www.youtube.com/watch?v=P7NE4WF8j-Q) — Harvard Stat 110 channel. Covers conditional probability and independence of events from scratch, with strong intuition for why P(A)·P(B) = P(A∩B) is the factorization test and why it fails under dependence. Best single lecture for the lesson's theoretical backbone.
+- [Stat 110 Lecture 9: Expectation, Indicator RVs, Linearity (Blitzstein, stat110harvard)](https://www.youtube.com/watch?v=LX2q356N2rU) — Harvard Stat 110 channel. Covers independence of random variables (not just events), the connection between independence and uncorrelatedness (zero covariance does not imply independence — unless jointly Gaussian), and the indicator variable technique. Complements prob-independence by showing how independence enters computations.
+
+## Science & depth recommendations (to reach master's level)
+
+- **The lesson never distinguishes pairwise independence from mutual independence.** Three events A, B, C can be pairwise independent (every pair satisfies P(A∩B) = P(A)P(B)) yet *not* mutually independent if P(A∩B∩C) ≠ P(A)P(B)P(C). In ML, Naive Bayes assumes *mutual* conditional independence — pairwise checks are not sufficient, and the distinction matters when the assumption is violated. A quiz question or deeper card on this would close a genuine graduate-level gap. Source: Blitzstein & Hwang, Ch. 2, Example 2.4.5.
+- **The "colliders flip the rule" card is correct but should name Berkson's paradox.** Conditioning on a collider (a common effect) and introducing dependence between its causes is the formal statement of Berkson's paradox, and "explaining away" in the graphical models literature. Naming it connects the lesson to a large body of causal inference work (Pearl, 2009) that learners will encounter. Source: Koller & Friedman, PGM Ch. 2; Pearl, *Causality* (Cambridge, 2009).
+- **The ML card's Naive Bayes claim should explain what the independence assumption buys computationally.** The lesson says NB "assumes features are independent GIVEN the class" but doesn't say that this makes inference tractable: P(x₁,…,xₙ|C) = ∏ P(xᵢ|C) turns a joint over n variables into n independent 1D lookups — from exponential to linear. Spelling this out — "the product factorizes, so you multiply n probabilities instead of searching an exponential table" — shows *why* the conditional independence assumption is so powerful, not just *that* it's made. Source: Goodfellow et al. §3.7; Bishop PRML Ch. 8.
+
+## Sources
+
+- [MIT 18.05 S22 Reading 7a: Joint Distributions, Independence](https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/mit18_05_s22_class07-prep-a.pdf) — MIT OpenCourseWare, confirmed live 169 kB PDF.
+- [Blitzstein & Hwang, Introduction to Probability 2nd ed. (official free PDF via probabilitybook.net)](https://drive.google.com/file/d/1VmkAAGOYCTORq1wxSQqy255qLJjTNvBI/) — Harvard Stat 110 companion text; CRC Press peer-reviewed.
+- [Deep Learning Book, Ch. 3 §3.7–3.8 (Goodfellow, Bengio, Courville)](https://www.deeplearningbook.org/contents/prob.html) — MIT Press 2016; authoritative ML-probability reference, free online.
+- [Koller & Friedman, Probabilistic Graphical Models (MIT Press 2009)](https://books.google.com/books/about/Probabilistic_Graphical_Models.html?id=7dzpHCHzNQ4C) — Graduate-authoritative peer-reviewed textbook on conditional independence, d-separation, and graphical models.
+- [Stat 110 Lecture 4: Conditional Probability (stat110harvard, YouTube)](https://www.youtube.com/watch?v=P7NE4WF8j-Q) — Harvard University, confirmed live.
+- [Stat 110 Lecture 9: Expectation, Indicator RVs, Linearity (stat110harvard, YouTube)](https://www.youtube.com/watch?v=LX2q356N2rU) — Harvard University, confirmed live.
