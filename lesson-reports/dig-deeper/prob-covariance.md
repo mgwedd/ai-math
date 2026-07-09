@@ -1,0 +1,31 @@
+# prob-covariance — Covariance & Correlation
+
+## Dig Deeper appendix (curated — graduate-authoritative)
+
+### Read
+
+- [MIT 18.05 Reading 7b: Covariance and Correlation](https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/mit18_05_s22_class07-prep-b.pdf) — Free 287 kB PDF from MIT's Introduction to Probability and Statistics (Spring 2022, Orloff & Kamrin). Covers Cov(X,Y) = E[(X−μ_X)(Y−μ_Y)], variance of sums, the correlation coefficient, and properties (bilinearity, Cauchy-Schwarz bound). At exactly the right level for this lesson and its ML extensions — the same formulas, with more worked examples. Confirmed live.
+- [Stanford CS109 Lecture Notes: Covariance (Lisa Yan, 2019)](https://web.stanford.edu/class/archive/cs/cs109/cs109.1202/lectureNotes/LN15_covariance.pdf) — Free PDF from Stanford's Probability for Computer Scientists course. Covers covariance definition, properties (including bilinearity and Cov(X,X) = Var(X)), independence implies zero covariance (but not vice versa), the correlation coefficient, and the covariance matrix — all with CS/ML framing. A concise and well-structured reference.
+- [Blitzstein & Hwang — Introduction to Probability, 2nd ed., Ch. 7](https://drive.google.com/file/d/1VmkAAGOYCTORq1wxSQqy255qLJjTNvBI/) — Harvard Stat 110 companion text (official free PDF). Chapter 7 covers covariance and correlation with Blitzstein's characteristic care about the Cauchy-Schwarz proof that |ρ| ≤ 1, the geometric view of correlation as a cosine (which the lesson's deeper card names but doesn't derive), and the counterexample showing zero correlation does not imply independence. CRC Press peer-reviewed.
+- [Goodfellow, Bengio & Courville — Deep Learning, Ch. 3, §3.9](https://www.deeplearningbook.org/contents/prob.html) — §3.9 covers the covariance matrix — the object PCA diagonalizes and the shape parameter of a multivariate Gaussian — and gives the link to the eigendecomposition. Directly grounds the lesson's ML note on Σ, PCA, whitening, and Mahalanobis distance. Free online.
+
+### Watch
+
+- [Stat 110 Lecture 21: Covariance and Correlation (Blitzstein, stat110harvard)](https://www.youtube.com/watch?v=IujCYxtpszU) — Harvard Stat 110 channel. The definitive lecture on covariance for a graduate audience: Blitzstein proves bilinearity, derives Var(X+Y) = Var(X) + Var(Y) + 2Cov(X,Y), explains why zero covariance is not independence, and works through the Hypergeometric variance as an application of the covariance machinery. Required viewing for anyone who wants the proofs behind the lesson's formulas.
+- [MIT 6.041SC Lecture 11: Derived Distributions, Convolution, Covariance & Correlation (Tsitsiklis, ~52 min)](https://ocw.mit.edu/courses/6-041sc-probabilistic-systems-analysis-and-applied-probability-fall-2013/resources/lecture-11-video/) — MIT OCW, confirmed free. Prof. Tsitsiklis covers covariance and correlation from the variance-of-sum formula, showing how the covariance captures the "cross terms." Complements Blitzstein's lecture with a more algebraic, textbook-aligned treatment.
+
+## Science & depth recommendations (to reach master's level)
+
+- **The lesson's "correlation is a cosine" deeper card correctly identifies the geometry but stops short of the proof.** Correlation ρ = Cov(X,Y)/(σ_X σ_Y) is the cosine of the angle between the centered data vectors; the proof uses the Cauchy-Schwarz inequality to show |ρ| ≤ 1 and identifies ρ = ±1 with collinearity. Adding the Cauchy-Schwarz bound as a one-line derivation would give learners the mathematical grounding to understand why −1 ≤ ρ ≤ 1 is not just a claim but a theorem. Source: Blitzstein & Hwang Ch. 7; MIT 18.05 Reading 7b.
+- **The covariance matrix Σ is mentioned in the ML card but never connected to the multivariate Gaussian density formula.** A master's student needs to see f(x) = (2π)^(−d/2) |Σ|^(−1/2) exp(−½(x−μ)ᵀΣ⁻¹(x−μ)) at least once before encountering it in a deep learning paper. The lesson's ML note says "Σ is the shape parameter of 𝒩(μ,Σ)" but doesn't show the formula. Adding even the exponent alone — "the −½(x−μ)ᵀΣ⁻¹(x−μ) in the Gaussian density is Mahalanobis distance squared, divided by 2" — would close a significant gap for learners reading ML papers. Source: Goodfellow et al. §3.9; Bishop PRML §2.3.
+- **Anscombe's Quartet should be cited as the canonical illustration of ρ's limitations.** The lesson correctly warns that "ρ only sees linear structure." Anscombe (1973) constructed four datasets with identical mean, variance, and correlation (ρ ≈ 0.816) but radically different shapes. Linking to this classic paper would give learners a concrete reference when they encounter correlation-only analysis in the wild. Source: Anscombe, F.J. (1973), "Graphs in Statistical Analysis," *The American Statistician*, 27(1), 17–21.
+
+## Sources
+
+- [MIT 18.05 S22 Reading 7b: Covariance and Correlation](https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/mit18_05_s22_class07-prep-b.pdf) — MIT OpenCourseWare, confirmed live 287 kB PDF.
+- [Stanford CS109 Lecture Notes: Covariance (LN15)](https://web.stanford.edu/class/archive/cs/cs109/cs109.1202/lectureNotes/LN15_covariance.pdf) — Stanford course notes, confirmed live PDF.
+- [Blitzstein & Hwang, Introduction to Probability 2nd ed. (official free PDF via probabilitybook.net)](https://drive.google.com/file/d/1VmkAAGOYCTORq1wxSQqy255qLJjTNvBI/) — Harvard Stat 110 companion text; CRC Press peer-reviewed.
+- [Deep Learning Book, Ch. 3 §3.9 (Goodfellow, Bengio, Courville)](https://www.deeplearningbook.org/contents/prob.html) — MIT Press 2016; authoritative ML-probability reference, free online.
+- [Stat 110 Lecture 21: Covariance and Correlation (stat110harvard, YouTube)](https://www.youtube.com/watch?v=IujCYxtpszU) — Harvard University, confirmed live.
+- [MIT 6.041SC Lecture 11: Covariance and Correlation (Tsitsiklis, MIT OCW)](https://ocw.mit.edu/courses/6-041sc-probabilistic-systems-analysis-and-applied-probability-fall-2013/resources/lecture-11-video/) — MIT OpenCourseWare, confirmed live (~52 min).
+- Anscombe, F.J. (1973), "Graphs in Statistical Analysis," *The American Statistician*, 27(1), 17–21 — Seminal paper introducing the four-dataset counterexample to correlation-only analysis.
