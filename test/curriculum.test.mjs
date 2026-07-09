@@ -440,6 +440,8 @@ describe('display formulas render as valid KaTeX (math accuracy regression guard
       fields.push([`${l.id} (learn)`, l.learn], [`${l.id} (ml)`, l.ml]);
       (l.deeper || []).forEach((d, i) => fields.push([`${l.id} (deeper[${i}])`, d.body]));
       (l.labs || []).forEach((lab, i) => fields.push([`${l.id} (labs[${i}].intro)`, lab.intro]));
+      (l.expositions || []).forEach((e, i) => fields.push(
+        [`${l.id} (expositions[${i}].title)`, e.title], [`${l.id} (expositions[${i}].caption)`, e.caption]));
       (l.quiz || []).forEach((q, qi) => {
         fields.push([`${l.id} (quiz[${qi}].q)`, q.q], [`${l.id} (quiz[${qi}].why)`, q.why]);
         (q.opts || []).forEach((o, oi) => fields.push([`${l.id} (quiz[${qi}].opts[${oi}])`, o]));
@@ -512,6 +514,26 @@ describe('registerLesson — validation + idempotency', () => {
     expect(LESSONS.length).toBe(n); // no duplicate appended
     expect(LESSONS.find(l => l.id === '__smoke_dup__').title).toBe('v2');
     drop('__smoke_dup__');
+  });
+});
+
+describe('expositions — validation (the visual-exposition mechanism)', () => {
+  it('rejects an exposition entry missing a string figure', () => {
+    INTERACTIVES.__smoke_ei__ = noop;
+    const spy = vi.spyOn(console, 'error').mockImplementation(noop);
+    registerLesson({ id: '__smoke_e__', world: 'pre', title: 't', interactive: '__smoke_ei__',
+      expositions: [{ title: 'no figure here' }], quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+    drop('__smoke_e__');
+  });
+
+  it('flags an exposition figure key that is not registered in INTERACTIVES', () => {
+    INTERACTIVES.__smoke_ei2__ = noop;
+    registerLesson({ id: '__smoke_e2__', world: 'pre', title: 't', interactive: '__smoke_ei2__',
+      expositions: [{ key: 'a', figure: '__no_such_figure__' }], quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    expect(validateCurriculum().join(' ')).toContain('__no_such_figure__');
+    drop('__smoke_e2__');
   });
 });
 
