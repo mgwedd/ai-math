@@ -64,21 +64,17 @@ wired.
 `lib/curriculum/concepts.js` (directly or via `TAG_ALIASES`). New-module
 PRs must ship their concept registrations in the same PR.
 
-**MS-gap closure wave** (per CURRICULUM-REVIEW.md): #63 `ml-conv` is
-merged. Open PRs — each refreshed with current main + its concept
-registrations, all 189 tests green on the combined tree. Safe merge order
-(verified by sequential merge simulation):
-1. #33 Next 16 bump — High-severity security fixes; merges clean
-2. #61 research depth-pass — 10 audit items; the c-graddesc card was
-   re-merged around #52's labs restructure
-3. #62 `ml-unsupervised` — k-means · GMM/EM · PCA (3 lessons)
-4. #64 `ml-kernels` — max-margin/SVM geometry · the kernel trick (2 lessons)
-5. #65 `proofs` — proof-literacy micro-course (4 lessons; the P1 item)
-6. #67 `rl` — MDPs/value iteration · Q-learning · policy gradients→RLHF (3
-   lessons)
-Steps 5–6 will show a trivial one-hunk `index.js` conflict at merge time
-(both append an import after `ml-kernels.js`) — keep both lines, or merge
-main into the branch first.
+**MS-gap closure wave** (per CURRICULUM-REVIEW.md) — **merged**: #63
+`ml-conv` · #61 research depth-pass (10 audit items; the c-graddesc card
+re-merged around #52's labs restructure) · #62 `ml-unsupervised` (k-means ·
+GMM/EM · PCA) · #64 `ml-kernels` (max-margin/SVM · the kernel trick) · #65
+`proofs` (proof-literacy micro-course; the P1 item). Each landed with its
+concept registrations.
+Still open:
+- #67 `rl` — MDPs/value iteration · Q-learning · policy gradients→RLHF (3
+  lessons); refreshed with current main + the eight RL concepts, 189 tests
+  green — last content module of the wave.
+- #33 Next 16 bump — High-severity security fixes; merges clean.
 The nine dig-deeper research-report PRs (#40–48) are merged; their remaining
 recommendations landed as #61.
 
