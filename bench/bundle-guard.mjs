@@ -64,7 +64,10 @@ for (const c of jsChunks) {
 }
 
 const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, 'utf8')) : null;
-const forbidden = baseline?.forbiddenInInitialChunks ?? ['pixi', 'three'];
+// Distinctive substrings only — bare 'pixi'/'three' are ordinary-word-adjacent
+// and would false-positive on minified app code; the regex signature scan below
+// is the primary detector.
+const forbidden = baseline?.forbiddenInInitialChunks ?? ['pixi.js', '@pixi', 'three.module'];
 
 // --- 1. forbidden-marker scan -------------------------------------------------
 // Look for the actual renderer runtime, not just any occurrence of the substring
@@ -87,6 +90,12 @@ for (const { chunk, path } of perChunk) {
 
 // --- update mode --------------------------------------------------------------
 if (has('--update')) {
+  // Never normalize a leaked build into the baseline: if renderer code is in
+  // the initial chunks, updating would bless the regression permanently.
+  if (leaks.length && !has('--force')) {
+    for (const l of leaks) console.error(`  leak: ${l.chunk}  matched ${[...l.signatures, ...l.names].join(', ')}`);
+    fail('refusing --update: renderer code present in initial chunks (see above). Fix the leak, or pass --force if this is a deliberate policy change.');
+  }
   const next = {
     ...(baseline ?? {}),
     _comment: baseline?._comment ?? 'Auth-gate bundle baseline. Regenerate: npm run build && node bench/bundle-guard.mjs --update.',

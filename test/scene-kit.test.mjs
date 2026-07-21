@@ -46,10 +46,14 @@ describe.skipIf(!HAVE_KIT)('registerScene — validation loudness + idempotent b
   const good = (over = {}) => ({
     id: '__q_ok__', space: 'plane2', params: {}, entities: () => [], ...over,
   });
+  // removes a synthetic scene so the shared SCENES singleton stays clean for
+  // the validateScenes / purity / capstone iterations (mirrors curriculum.test.mjs drop())
+  const drop = (id) => { const i = registry.SCENES.findIndex((s) => s.id === id); if (i >= 0) registry.SCENES.splice(i, 1); };
 
   it('accepts a well-formed scene without throwing', () => {
     const { registerScene } = registry;
     expect(() => registerScene(good())).not.toThrow();
+    drop('__q_ok__');
   });
 
   it('THROWS with the id in the message on a malformed scene', () => {
@@ -60,6 +64,7 @@ describe.skipIf(!HAVE_KIT)('registerScene — validation loudness + idempotent b
       { id: '__q_badspace__', space: 'nope', params: {}, entities: () => [] }, // bad space
       { id: '__q_badparams__', space: 'plane2', params: [], entities: () => [] }, // params not plain obj
       { id: '__q_badent__', space: 'plane2', params: {}, entities: 42 },     // entities not a fn
+      { id: '__q_badgoal__', space: 'plane2', params: {}, entities: () => [], goals: [{ text: 'no predicate or type' }] }, // malformed goal descriptor (§1/§7)
     ];
     for (const c of cases) {
       let threw = null;
@@ -77,14 +82,15 @@ describe.skipIf(!HAVE_KIT)('registerScene — validation loudness + idempotent b
     registerScene(good({ id: '__q_dup__', caption: 'v2' }));
     expect(SCENES.length, 'no duplicate appended').toBe(n);
     expect(SCENES.find((s) => s.id === '__q_dup__').caption).toBe('v2');
+    drop('__q_dup__');
   });
 
-  it('validateScenes() reports zero issues for the shipped scenes', () => {
+  it('validateScenes() reports ZERO issues for the shipped scenes', () => {
     const { validateScenes } = registry;
     // Contract: validateScenes re-runs shape checks + asserts entities(p,0)
-    // evaluates without throwing. Should be clean for whatever shipped.
-    const issues = validateScenes();
-    expect(Array.isArray(issues)).toBe(true);
+    // evaluates without throwing. Whatever ships must be clean — a non-empty
+    // list here is a shipped-scene defect, not tolerable drift.
+    expect(validateScenes()).toEqual([]);
   });
 });
 
@@ -166,7 +172,21 @@ describe.skipIf(!HAVE_KIT || !scenePresent('diff.js'))('diff — keyed add/updat
     const ops = diff(prev, [e('a', 5)]);
     const up = ops.find((o) => o.type === 'update' && o.key === 'a');
     expect(up, 'a changed -> update op').toBeTruthy();
-    if (up.changed) expect(up.changed).toContain('x');
+    // §4: update ops carry `changed` (list of changed prop keys) — REQUIRED.
+    expect(Array.isArray(up.changed), 'update op must carry a changed-key list').toBe(true);
+    expect(up.changed).toContain('x');
+  });
+
+  it('function-valued props always compare as changed (§4 — fns cannot be value-compared)', () => {
+    if (!diff) return;
+    // kit-core decision: diff compares by VALUE, but function props (label fn,
+    // curve fn) can't be value-compared, so fresh closures each frame => the
+    // entity is always "changed" and redraws. Pin that rule.
+    const mk = () => ({ kind: 'label', key: 'l', text: () => 'hi', at: 'readout' });
+    const ops = diff([mk()], [mk()]);
+    const up = ops.find((o) => o.type === 'update' && o.key === 'l');
+    expect(up, 'fresh closure prop must emit an update op').toBeTruthy();
+    expect(up.changed).toContain('text');
   });
 
   it('emits NO op for an unchanged entity', () => {
@@ -272,19 +292,13 @@ describe.skipIf(!HAVE_KIT)('capstone — randomized params across attempts + tol
     if (capstones.length === 0) return; // flagship's la-dot capstone not integrated here yet
 
     for (const cap of capstones) {
-      // Randomization: the contract carries capstone:true; the scene must expose
-      // a way to re-roll params per attempt. Accept either a factory (params is a
-      // fn) or a randomize()/newAttempt() hook. Assert variation across attempts.
-      const roll = () => {
-        if (typeof cap.newAttempt === 'function') return cap.newAttempt();
-        if (typeof cap.params === 'function') return cap.params();
-        return null;
-      };
-      const a1 = roll(); const a2 = roll();
-      if (a1 && a2) {
-        expect(JSON.stringify(a1)).not.toBe(JSON.stringify(a2)); // params actually vary
-      }
-      // tolerance + hold: at least one capstone goal must carry a hold (>0) so
+      // RANDOMIZATION: CONTRACT v1 has no per-attempt reroll seam (confirmed
+      // contract gap — architect directed kit-core to publish an additive v1.1
+      // naming it). DO NOT guess the hook here; bind this half of the test to
+      // the real name once kit-core.md Handoffs announces v1.1.
+      // TODO(quality): assert params vary across attempts via the v1.1 seam.
+
+      // TOLERANCE + HOLD: at least one capstone goal must carry a hold (>0) so
       // drive-by passes are impossible (VF §8 assessment integrity).
       const goals = cap.goals || [];
       const holds = goals.filter((g) => (g.hold ?? 0) > 0);

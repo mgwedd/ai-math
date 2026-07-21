@@ -40,7 +40,7 @@ const POINTS = arg('points', 1000);
 const BUDGET_MS = 1000 / 60; // 16.67
 
 /* ------------------------------- proxy model ------------------------------- */
-// A display-list entity is { id, type, ...props }. The grid morph animates every
+// A display-list entity is { key, kind, ...props } (CONTRACT §3). The grid morph animates every
 // vertex; the point field animates every point. This is the worst-ish case: the
 // whole list changes each frame, so the diff can't skip anything.
 
@@ -53,8 +53,8 @@ function buildDisplayList(t, grid, points) {
       const x0 = ix / (grid - 1) * 2 - 1;
       const y0 = iy / (grid - 1) * 2 - 1;
       list.push({
-        id: 'g' + iy * grid + ix,
-        type: 'gridVertex',
+        key: 'g' + iy * grid + ix,
+        kind: 'gridVertex',
         x: a * x0 + b * y0,
         y: c * x0 + d * y0,
         color: 'accent',
@@ -65,8 +65,8 @@ function buildDisplayList(t, grid, points) {
   for (let i = 0; i < points; i++) {
     const ph = i * 0.023;
     list.push({
-      id: 'p' + i,
-      type: 'point',
+      key: 'p' + i,
+      kind: 'point',
       x: Math.sin(t + ph) * 0.9,
       y: Math.cos(t * 1.3 + ph) * 0.9,
       r: 2,
@@ -76,17 +76,17 @@ function buildDisplayList(t, grid, points) {
   return list;
 }
 
-// Reference keyed diff: reconcile next list against prev retained map by id,
-// emitting add / remove / update(changed keys) ops — the shape a retained-mode
+// Reference keyed diff (PROXY mode): reconcile next list against prev retained
+// map by key, counting add / remove / update ops — the shape a retained-mode
 // draw layer needs. O(n) with a Map, shallow prop compare.
 function keyedDiff(prevMap, nextList) {
   const seen = new Set();
   let adds = 0, updates = 0, removes = 0;
   const nextMap = new Map();
   for (const e of nextList) {
-    nextMap.set(e.id, e);
-    seen.add(e.id);
-    const prev = prevMap.get(e.id);
+    nextMap.set(e.key, e);
+    seen.add(e.key);
+    const prev = prevMap.get(e.key);
     if (!prev) { adds++; continue; }
     // shallow compare props (the reconcile has to detect what changed)
     let changed = false;
@@ -94,8 +94,29 @@ function keyedDiff(prevMap, nextList) {
     if (!changed) for (const k in prev) { if (!(k in e)) { changed = true; break; } }
     if (changed) updates++;
   }
-  for (const id of prevMap.keys()) if (!seen.has(id)) removes++;
+  for (const key of prevMap.keys()) if (!seen.has(key)) removes++;
   return { nextMap, adds, updates, removes };
+}
+
+/* Mode adapters — unify the runner loop over both diff shapes.
+ * PROXY carries a Map as retained state. REAL follows CONTRACT §4 exactly:
+ * diff(prevList, nextList) -> ops[], op = {type:'add'|'update'|'remove', ...},
+ * so its retained state is simply the previous entity ARRAY. */
+function proxyStep(prevState, nextList) {
+  const r = keyedDiff(prevState, nextList);
+  return { state: r.nextMap, adds: r.adds, updates: r.updates, removes: r.removes };
+}
+function makeRealStep(diff) {
+  return (prevState, nextList) => {
+    const ops = diff(prevState, nextList);   // CONTRACT §4: (prev[], next[]) -> op[]
+    let adds = 0, updates = 0, removes = 0;
+    for (const op of ops) {
+      if (op.type === 'add') adds++;
+      else if (op.type === 'update') updates++;
+      else if (op.type === 'remove') removes++;
+    }
+    return { state: nextList, adds, updates, removes };
+  };
 }
 
 /* ------------------------------ real kit probe ----------------------------- */
@@ -126,23 +147,24 @@ async function main() {
   console.log(`entity-diff bench — mode: ${mode}`);
   console.log(`workload: ${GRID}x${GRID} grid (${GRID * GRID} vertices) + ${POINTS} points = ${GRID * GRID + POINTS} entities/frame, ${FRAMES} frames, budget ${BUDGET_MS.toFixed(2)} ms/frame\n`);
 
-  const diffFn = kit ? kit.diff : keyedDiff;
+  const step = kit ? makeRealStep(kit.diff) : proxyStep;
+  const freshState = () => (kit ? [] : new Map());
   const buildTimes = [], diffTimes = [], totalTimes = [];
-  let prevMap = new Map();
+  let state = freshState();
   let lastOps = null;
 
   // warm up JIT
-  for (let i = 0; i < 30; i++) { const l = buildDisplayList(i * 0.01, GRID, POINTS); prevMap = diffFn(prevMap, l).nextMap; }
-  prevMap = new Map();
+  for (let i = 0; i < 30; i++) { const l = buildDisplayList(i * 0.01, GRID, POINTS); state = step(state, l).state; }
+  state = freshState();
 
   for (let f = 0; f < FRAMES; f++) {
     const t = f * 0.016;
     const b0 = performance.now();
     const list = buildDisplayList(t, GRID, POINTS);
     const b1 = performance.now();
-    const res = diffFn(prevMap, list);
+    const res = step(state, list);
     const b2 = performance.now();
-    prevMap = res.nextMap;
+    state = res.state;
     lastOps = res;
     buildTimes.push(b1 - b0);
     diffTimes.push(b2 - b1);

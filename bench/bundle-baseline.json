@@ -6,7 +6,11 @@
   "firstLoadJsKB": 172,
   "initialChunkBytesOnDisk": 611624,
   "initialChunkCount": 7,
-  "forbiddenInInitialChunks": ["pixi.js", "pixi", "three", "@pixi", "three.module"],
+  "forbiddenInInitialChunks": [
+    "pixi.js",
+    "@pixi",
+    "three.module"
+  ],
   "tolerance": {
     "_comment": "Allow small drift from unrelated shell changes; a real pixi leak (>100KB gz) blows past this. firstLoadJs is the authoritative Next-reported metric; disk bytes are a coarser secondary guard.",
     "firstLoadJsKBMax": 185,

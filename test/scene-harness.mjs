@@ -30,8 +30,10 @@ const REPO = join(__dirname, '..');
 /* ----------------------------- feature detect ----------------------------- */
 export const kitPresent = () => existsSync(join(REPO, 'lib/scene/registry.js'));
 export const scenePresent = (rel) => existsSync(join(REPO, 'lib/scene', rel));
-export const motionPresent = () => existsSync(join(REPO, 'lib/scene/clock.js'));
-export const interactionPresent = () => existsSync(join(REPO, 'lib/scene/interaction.js'));
+// CONTRACT §0 names clock.js / interaction.js; motion's log plans motion.js+sim.js
+// and interaction shipped interact.js+goals.js (drift flagged in review) — detect both.
+export const motionPresent = () => ['clock.js', 'motion.js'].some(scenePresent);
+export const interactionPresent = () => ['interaction.js', 'interact.js'].some(scenePresent);
 
 /** Dynamic-import a kit module by path under lib/scene, or null if absent. */
 export async function importScene(rel) {
