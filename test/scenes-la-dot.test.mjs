@@ -99,10 +99,10 @@ describe('THE GOAL-BASELINE INVARIANT: nothing is satisfied at load', () => {
     }
     expect(offenders).toEqual([]);
   });
-  it('the randomized capstone is baseline-clean for 200 seeds', () => {
+  it('the randomized capstone is baseline-clean for 1000 seeds', () => {
     const cap = capstoneFor(LESSON);
     const offenders = [];
-    for (let seed = 1; seed <= 200; seed++) {
+    for (let seed = 1; seed <= 1000; seed++) {
       const s0 = cap.randomize(makeRng(seed));
       cap.goals.forEach((g, i) => { if (g.predicate(s0)) offenders.push(seed + '#' + i); });
     }
@@ -219,7 +219,56 @@ describe('capstone: weak-area tag migration + the official reroll seam', () => {
     expect(c.hasLearnerInput()).toBe(false);
     c.destroy();
   });
-  it('has at least one hold>0 goal (drive-by passes are blocked)', () => {
-    expect(capstoneFor(LESSON).goals.some((g) => g.hold > 0)).toBe(true);
+  it('every capstone goal has hold>0 (drive-by passes are blocked, exam-wide)', () => {
+    expect(capstoneFor(LESSON).goals.every((g) => g.hold > 0)).toBe(true);
+  });
+});
+
+describe('ANTI-GAMING: degenerate (zero-vector) strategies must NOT credit', () => {
+  // Review-confirmed defects: three goals could be "solved" by shrinking a
+  // vector to (near-)nothing or zeroing a query, rather than by actually
+  // reasoning about angle/temperature. Each case below plays the degenerate
+  // strategy first (must stay false) then the legitimate strategy (must
+  // credit) — proving the fix blocks the exploit without breaking the goal.
+
+  it('dot.anatomy g2 (fold a ⟂ b): shrinking a to near-zero must NOT credit', () => {
+    const s = scenesForLesson(LESSON)[0];
+    // exact repro of the confirmed defect: a shrunk to ~0.047 magnitude at
+    // 46.7° off perpendicular to b — near-zero projection from magnitude,
+    // not from a genuine right angle.
+    const b = { x: 1.4, y: 2.4 };
+    const th = Math.atan2(b.y, b.x) + Math.PI / 2 - (46.7 * Math.PI) / 180;
+    const degenerateA = fromPolar(0.047, th);
+    expect(s.goals[1].predicate({ a: degenerateA, b })).toBe(false);
+    // legitimate: a real, non-degenerate a actually perpendicular to b
+    const legitA = fromPolar(2.5, Math.atan2(b.y, b.x) + Math.PI / 2);
+    expect(s.goals[1].predicate({ a: legitA, b })).toBe(true);
+  });
+
+  it('dot.threegoals g1 (orthogonal): a zero-length vector must NOT credit', () => {
+    const s = scenesForLesson(LESSON)[2];
+    const b = { x: 1, y: 2.5 };
+    // exact zero (the defensive cos()=>0 fallback) — the previously-exploitable case
+    expect(s.goals[0].predicate({ a: { x: 0, y: 0 }, b })).toBe(false);
+    // near-zero, off-perpendicular — same exploit shape as the anatomy case
+    expect(s.goals[0].predicate({ a: { x: 0.01, y: 0.02 }, b })).toBe(false);
+    // legitimate: two real, perpendicular vectors
+    const legitA = fromPolar(2.5, Math.atan2(b.y, b.x) + Math.PI / 2);
+    expect(s.goals[0].predicate({ a: legitA, b })).toBe(true);
+  });
+
+  it('dot.attention g2 (flatten): zeroing the query must NOT credit; raising temperature does', () => {
+    const s = scenesForLesson(LESSON)[5];
+    const baseQ = { x: 1.8, y: 1.2 };
+    const yHi = 4; // TK_HI → T_MAX, the track's hottest end
+    const yLo = -4; // TK_LO → T_MIN, baseline-ish temperature
+    // exploit: zero query -> every dot(q,k)=0 -> uniform 0.25 softmax under
+    // ANY temperature, "flattening" for free without ever raising the heat.
+    expect(s.goals[1].predicate({ q: { x: 0, y: 0 }, tk: { x: 5.2, y: yHi } })).toBe(false);
+    // a real but untouched (cool) temperature must not credit either — the
+    // goal is specifically about RAISING the temperature.
+    expect(s.goals[1].predicate({ q: baseQ, tk: { x: 5.2, y: yLo } })).toBe(false);
+    // legitimate: real query, temperature genuinely raised
+    expect(s.goals[1].predicate({ q: baseQ, tk: { x: 5.2, y: yHi } })).toBe(true);
   });
 });

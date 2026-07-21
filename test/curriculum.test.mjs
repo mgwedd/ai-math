@@ -671,4 +671,24 @@ describe('scene-lesson validation — capstone placement (Scene Kit CONTRACT §7
     expect(base([]).join(' ')).toContain('non-empty array');
     expect(base('dot.capstone').join(' ')).toContain('non-empty array');
   });
+
+  // Review-confirmed defect: the PRODUCTION la-dot lesson (registered by
+  // lib/curriculum/index.js, not a synthetic __smoke_sc__ lesson) used to
+  // carry only `labs`/`interactive`, never `scenes:[...]`, so this whole
+  // §7.1 rule never actually ran against shipped content — the tests above
+  // only proved the RULE works on synthetic inputs. Assert directly on the
+  // real, already-loaded `la-dot` lesson from the top-level beforeAll import.
+  it('the REAL la-dot lesson (not a synthetic smoke lesson) wires `scenes` and passes §7.1', () => {
+    const lesson = LESSONS.find((l) => l.id === 'la-dot');
+    expect(lesson, 'la-dot must be registered').toBeTruthy();
+    expect(lesson.scenes).toEqual([
+      'dot.anatomy', 'dot.alignment', 'dot.threegoals', 'dot.scaleinvariance',
+      'dot.search', 'dot.attention', 'dot.capstone',
+    ]);
+    expect(lesson.scenes[lesson.scenes.length - 1]).toBe('dot.capstone'); // capstone LAST
+    // the old lab is untouched — additive, not a replacement
+    expect(lesson.labs.some((l) => l.interactive === 'dot')).toBe(true);
+    const errs = validateCurriculum().filter((e) => e.includes('"la-dot"'));
+    expect(errs).toEqual([]);
+  });
 });
