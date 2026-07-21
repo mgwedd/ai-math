@@ -52,18 +52,17 @@ Object.assign(globalThis.document, {
   querySelectorAll: ()=>[], addEventListener: noop, removeEventListener: noop,
 });
 
-let engine, mountGoals, setSceneRuntime, S;
+let engine, mountGoals, setSceneBackend, S;
 beforeAll(async () => {
   await import('../lib/curriculum/index.js');
   engine = await import('../lib/engine.js');
-  mountGoals = engine.mountGoals; setSceneRuntime = engine.setSceneRuntime; S = engine.S;
+  mountGoals = engine.mountGoals; setSceneBackend = engine.setSceneBackend; S = engine.S;
 });
 
-// goal defs shaped like lib/scene/goals.js goal() output (mountGoals reads text/xp
-// and hands the def array straight to makeGoals).
-const g = (text, predicate, xp = 10, extra = {}) => ({ kind:'state', text, predicate, xp, hold:0, hint:null, ...extra });
+// CONTRACT §7 goal descriptors (seams/goals.js shape: type discriminator).
+const g = (text, predicate, xp = 10, extra = {}) => ({ type:'goal', text, predicate, xp, ...extra });
 
-describe('mountGoals persistence + baseline through the full engine wiring', () => {
+describe('mountGoals persistence + crediting rules through the full engine wiring', () => {
   const key = () => 'scene-test::' + Math.random().toString(36).slice(2);
 
   it('persists completions under the lessonId::sceneId key in index→bool shape', () => {
@@ -71,17 +70,29 @@ describe('mountGoals persistence + baseline through the full engine wiring', () 
     const { g: rt } = mountGoals(makeNode(), k, [g('reach v=1', s => s.v === 1, 25)]);
     rt.evaluate({ v: 0 });            // baseline
     expect(S.missions[k]).toBeUndefined();
-    rt.evaluate({ v: 1 });           // learner-driven → credit
+    rt.markLearnerInput();            // interaction observed a grab/nudge
+    rt.evaluate({ v: 1 });            // learner-driven → credit
     expect(S.missions[k]).toEqual({ 0: true });
   });
 
-  it('does NOT complete a goal that is true at the default state on the FIRST evaluate', () => {
+  it('does NOT complete a goal true at the default state on the FIRST evaluate', () => {
     const k = key(); delete S.missions[k];
     let done = false;
     const { g: rt } = mountGoals(makeNode(), k, [g('true at default', s => s.v === 0, 20)], () => { done = true; });
+    rt.markLearnerInput();
     rt.evaluate({ v: 0 });           // baseline, default state — must NOT credit
     expect(rt.allDone()).toBe(false);
     expect(done).toBe(false);
+    expect(S.missions[k]).toBeUndefined();
+  });
+
+  it('never credits without learner input, even across many evaluates', () => {
+    const k = key(); delete S.missions[k];
+    const { g: rt } = mountGoals(makeNode(), k, [g('v=1', s => s.v === 1, 10)]);
+    rt.evaluate({ v: 0 });           // baseline
+    rt.evaluate({ v: 1 });           // tween/sim sweep — no input observed
+    rt.evaluate({ v: 1 });
+    expect(rt.allDone()).toBe(false);
     expect(S.missions[k]).toBeUndefined();
   });
 
@@ -92,6 +103,7 @@ describe('mountGoals persistence + baseline through the full engine wiring', () 
       g('a', s => s.a, 10), g('b', s => s.b, 10),
     ], () => { gated = true; });
     rt.evaluate({});                 // baseline
+    rt.markLearnerInput();
     rt.evaluate({ a: true });        // one down
     expect(gated).toBe(false);
     rt.evaluate({ a: true, b: true });
@@ -107,16 +119,40 @@ describe('mountGoals persistence + baseline through the full engine wiring', () 
     expect(rt.allDone()).toBe(true);
     return new Promise((res) => setTimeout(() => { expect(fired).toBe(true); res(); }, 5));
   });
+
+  it('dispose() before the deferred re-entry tick swallows onAllDone (stale confetti)', () => {
+    const k = key();
+    S.missions[k] = { 0: true };
+    let fired = false;
+    const { g: rt } = mountGoals(makeNode(), k, [g('a', () => false, 10)], () => { fired = true; });
+    rt.dispose();                    // navigated away before the tick
+    return new Promise((res) => setTimeout(() => { expect(fired).toBe(false); res(); }, 5));
+  });
 });
 
-describe('scene runtime seam', () => {
-  it('exports setSceneRuntime for Kit Core to register a renderer', () => {
-    expect(typeof setSceneRuntime).toBe('function');
-    let received = null;
-    const fakeRuntime = { mount: (spec, el, ctx) => { received = { spec, el, ctx }; return () => {}; } };
-    // Registration must not throw; the renderer is consumed by renderScenes when
-    // a `scenes:[...]` lesson is routed (exercised in-app / by the flagship P0).
-    expect(() => setSceneRuntime(fakeRuntime)).not.toThrow();
-    setSceneRuntime(null);           // reset so it can't leak into other suites
+describe('headless backend seam', () => {
+  it('exports setSceneBackend (tests inject createNullBackend; prod never calls it)', () => {
+    expect(typeof setSceneBackend).toBe('function');
+    expect(() => setSceneBackend(null)).not.toThrow();
+  });
+});
+
+describe('resetLessonProgress sweeps namespaced :: keys', () => {
+  it('clears scene-goal / multi-lab / predict progress along with the lesson', () => {
+    const id = 'reset-test-' + Math.random().toString(36).slice(2);
+    S.done[id] = true;
+    S.missions[id] = { 0: true };
+    S.missions[id + '::intro'] = { 0: true };        // scene goals
+    S.missions[id + '::predict'] = { committed: true };
+    S.missions[id + '::2'] = { 1: true };            // multi-lab missions
+    S.missions['other::intro'] = { 0: true };        // NOT ours — must survive
+    engine.resetLessonProgress(id);
+    expect(S.done[id]).toBeUndefined();
+    expect(S.missions[id]).toBeUndefined();
+    expect(S.missions[id + '::intro']).toBeUndefined();
+    expect(S.missions[id + '::predict']).toBeUndefined();
+    expect(S.missions[id + '::2']).toBeUndefined();
+    expect(S.missions['other::intro']).toEqual({ 0: true });
+    delete S.missions['other::intro'];
   });
 });
