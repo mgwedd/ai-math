@@ -266,42 +266,53 @@ describe.skipIf(!HAVE_KIT || !motionPresent())('tween determinism via the real c
 });
 
 /* ==================== 3. GOAL BASELINE invariant ========================= */
+// Bound to interaction's v1.2 surface (ai/p0-interaction @ 9f459ca):
+//   - RUNTIME: lib/scene/goals.js exports makeGoals(defs, cfg) with cfg
+//     {store, onComplete, onAllDone, now, schedule, cancel} and an api
+//     {evaluate(state), reportEpisode(ep), markLearnerInput,
+//      bindLearnerInput(fn), allDone, isDone, dispose}.
+//   - DESCRIPTOR factories live in KIT-CORE's seams/goals.js; the 9f459ca
+//     rework REMOVED interaction's own goal() export. The previous guard
+//     `if (!mod?.goal) return;` therefore early-returned and these tests
+//     passed VACUOUSLY — the surface is now asserted loudly instead.
+//   - v1.2: makeGoals gates ALL crediting on learner input (standalone flag
+//     via markLearnerInput(), or a bound controller flag via bindLearnerInput);
+//     the baseline rule is RETAINED beneath the gate, so these tests open the
+//     gate up front to isolate the baseline invariant.
 describe.skipIf(!interactionPresent())('goal baseline — first evaluation never credits (§7/§8)', () => {
-  // Bound to interaction's SHIPPED surface (ai/p0-interaction):
-  // lib/scene/goals.js exports goal()/episode()/visited() + makeGoals(defs, cfg)
-  // with cfg {store, onComplete, onAllDone, now, schedule, cancel} and an api
-  // {evaluate(state), reportEpisode(ep), allDone, isDone, dispose}.
-  const loadGoals = async () =>
-    (await importScene('goals.js')) || (await importScene('interaction.js'));
+  let makeGoals, goal;
+  beforeAll(async () => {
+    const rt = await importScene('goals.js');
+    const seams = (await importScene('seams/goals.js')) || (await importScene('index.js'));
+    makeGoals = rt?.makeGoals;
+    goal = seams?.goal;
+  });
 
-  it('a goal true at the default param state is NOT credited on the baseline eval', async () => {
-    const mod = await loadGoals();
-    if (!mod?.makeGoals || !mod?.goal) return; // surface renamed — reflag in review
-    const { goal, makeGoals } = mod;
+  it('the shipped surface exists: makeGoals runtime + kit goal() factory (fail loudly on rename)', () => {
+    expect(typeof makeGoals, 'goals.js must export makeGoals').toBe('function');
+    expect(typeof goal, 'kit seams/goals.js must export goal()').toBe('function');
+  });
 
+  it('a goal true at the default state is NOT credited on the baseline eval — even with the gate open', () => {
     let credited = 0;
     const g = makeGoals(
       [goal('at origin', (s) => s.a === 0, { xp: 20 })],
       { onComplete: () => { credited++; } },
     );
-    // FIRST evaluation = baseline. Even though predicate is true, no credit.
-    g.evaluate({ a: 0 });
+    g.markLearnerInput();            // open the v1.2 gate up front: the baseline
+                                     // rule must hold INDEPENDENTLY of the gate
+    g.evaluate({ a: 0 });            // FIRST evaluation = baseline; predicate true
     expect(credited, 'baseline must not credit').toBe(0);
     expect(g.allDone()).toBe(false);
-    // Learner-driven later evaluations: away, then back to the qualifying state.
-    g.evaluate({ a: 1 });
+    g.evaluate({ a: 1 });            // learner-driven: away…
     expect(credited).toBe(0);
-    g.evaluate({ a: 0 });
+    g.evaluate({ a: 0 });            // …and back to the qualifying state
     expect(credited, 'later qualifying eval credits').toBe(1);
     expect(g.allDone()).toBe(true);
     g.dispose();
   });
 
-  it('hold-time goals: baseline cannot arm the hold; a drive-by pass does not credit', async () => {
-    const mod = await loadGoals();
-    if (!mod?.makeGoals || !mod?.goal) return;
-    const { goal, makeGoals } = mod;
-
+  it('hold-time goals: baseline cannot arm the hold; a drive-by pass does not credit', () => {
     // Injected deterministic clock + captured timers (contract: hold via
     // injected schedule/cancel so a stopped learner still completes at T+hold).
     let t = 0;
@@ -318,6 +329,7 @@ describe.skipIf(!interactionPresent())('goal baseline — first evaluation never
     );
     const fire = () => { for (const tk of timers.splice(0)) if (!tk.dead) { t = Math.max(t, tk.at); tk.fn(); } };
 
+    g.markLearnerInput();            // gate open — isolating the BASELINE rule
     g.evaluate({ v: 0.9 });          // BASELINE — predicate true, must not arm/credit
     fire();                           // any timer armed by baseline would credit here
     expect(credited, 'baseline must not credit even via a hold timer').toBe(0);
@@ -441,25 +453,33 @@ describe.skipIf(!HAVE_KIT)('learner-input gate — controller seam (v1.2 §7/§8
 });
 
 // The RUNTIME half — the goals runtime must actually CONSULT the gate so no
-// goal of any type (state/episode/visited) credits while it is closed. Bound to
-// interaction's shipped surface + the CONTRACT §7 injected `hasLearnerInput`
-// seam. Dormant until the interaction principal lands the gate-aware runtime;
-// activates on integration (re-reviewed against interaction's final SHA).
+// goal of any type (state/episode/visited) credits (and no visited key
+// ACCUMULATES) while it is closed. Bound to interaction's real 9f459ca seam:
+// `runtime.bindLearnerInput(fn)` — interaction.js binds it to
+// `() => controller.hasLearnerInput()` so newAttempt()'s reset flows through
+// (CONTRACT §7 "injected hasLearnerInput" realized as a bind, one flag, no copy).
 describe.skipIf(!interactionPresent())('learner-input gate — goals runtime consults the gate (v1.2 §7)', () => {
-  const loadGoals = async () =>
-    (await importScene('goals.js')) || (await importScene('interaction.js'));
+  let makeGoals, goal, episode, visited;
+  beforeAll(async () => {
+    const rt = await importScene('goals.js');
+    const seams = (await importScene('seams/goals.js'));
+    makeGoals = rt?.makeGoals;
+    ({ goal, episode, visited } = seams || {});
+  });
 
-  it('a qualifying learner-driven change does NOT credit while the gate is closed, and DOES once opened', async () => {
-    const mod = await loadGoals();
-    if (!mod?.makeGoals || !mod?.goal) return; // surface renamed — reflag in review
-    const { goal, makeGoals } = mod;
+  it('the gate seam exists: makeGoals exposes bindLearnerInput (fail loudly on rename)', () => {
+    expect(typeof makeGoals).toBe('function');
+    expect(typeof makeGoals([], {}).bindLearnerInput, 'runtime must expose bindLearnerInput(fn)').toBe('function');
+  });
 
+  it('no goal of ANY type credits while the bound gate is closed; state goals credit once opened', () => {
     let gateOpen = false;
     let credited = 0;
     const g = makeGoals(
       [goal('reach a=0', (s) => s.a === 0, { xp: 20 })],
-      { onComplete: () => { credited++; }, hasLearnerInput: () => gateOpen },
+      { onComplete: () => { credited++; } },
     );
+    g.bindLearnerInput(() => gateOpen);   // the controller-bound gate (one flag)
     g.evaluate({ a: 1 });            // baseline
     g.evaluate({ a: 0 });            // qualifying but GATE CLOSED — must not credit
     g.evaluate({ a: 1 });
@@ -470,6 +490,50 @@ describe.skipIf(!interactionPresent())('learner-input gate — goals runtime con
     g.evaluate({ a: 1 });
     g.evaluate({ a: 0 });            // qualifying, gate OPEN -> credits
     expect(credited, 'gate open: qualifying learner-driven change credits').toBe(1);
+
+    // A bound gate must WIN over the runtime's standalone flag (one flag, no
+    // mirror): closing the bound gate re-gates even after markLearnerInput().
+    gateOpen = false;                 // ~ controller.newAttempt() reset
+    g.dispose();
+    expect(g.allDone()).toBe(true);   // first goal done; runtime disposed cleanly
+  });
+
+  it('episodes are gated: an auto-run sim outcome credits NOTHING before learner input', () => {
+    let gateOpen = false;
+    let credited = 0;
+    const g = makeGoals(
+      [episode('converge', (ep) => !!ep.converged, { xp: 30 })],
+      { onComplete: () => { credited++; } },
+    );
+    g.bindLearnerInput(() => gateOpen);
+    g.evaluate({});                   // baseline
+    g.reportEpisode({ converged: true });   // auto-run sim converging at load
+    expect(credited, 'gated episode: no credit before learner input').toBe(0);
+    gateOpen = true;
+    g.reportEpisode({ converged: true });   // learner-driven run
+    expect(credited, 'episode credits after learner input').toBe(1);
+    g.dispose();
+  });
+
+  it('visited() keys do NOT accumulate while the gate is closed (accumulation gate, §7 frozen text)', () => {
+    let gateOpen = false;
+    let credited = 0;
+    const g = makeGoals(
+      [visited('see both signs', (s) => (s.a > 0 ? 'pos' : 'neg'), { keys: ['pos', 'neg'], xp: 30 })],
+      { onComplete: () => { credited++; } },
+    );
+    g.bindLearnerInput(() => gateOpen);
+    g.evaluate({ a: 1 });            // baseline sweep (e.g. mount tween)…
+    g.evaluate({ a: -1 });           // …passes through BOTH variants, gate closed
+    g.evaluate({ a: 1 });
+    expect(credited, 'pre-input sweep banks nothing').toBe(0);
+
+    gateOpen = true;                  // first learner input
+    g.evaluate({ a: 1 });            // if pre-input keys had banked, this single
+                                      // eval would instant-credit — it must not
+    expect(credited, 'first learner-driven eval cannot instant-credit off banked keys').toBe(0);
+    g.evaluate({ a: -1 });           // learner genuinely visits the second variant
+    expect(credited, 'both variants visited post-input -> credits').toBe(1);
     g.dispose();
   });
 });
