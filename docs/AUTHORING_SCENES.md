@@ -207,6 +207,18 @@ performed no insight. Choose initial `params` so **every** `goal.predicate(s0)`
 is false. This is statically testable — the la-dot test asserts it for all seven
 scenes and for the capstone across 200 seeds. Write that test for your lesson.
 
+### THE LEARNER-INPUT GATE (architect ruling, contract-level)
+
+> **No goal credits — of any kind — until at least one learner interaction has
+> occurred since mount.** Param changes driven by auto-run sims or mount-time
+> tweens never credit a goal on their own.
+
+The interaction runtime enforces this, but author with it in mind: if your
+scene auto-sweeps a param through a goal's satisfying region (e.g. scene 2's
+alignment sweep passes through all three cos anchors), that pass-through
+credits nothing — the learner must drag/scrub to earn it. Design goals so the
+*learner's* manipulation, not the ambient motion, is what satisfies them.
+
 ### REACHABILITY (the other half)
 
 > **Every goal must have at least one satisfying state** the learner can
@@ -250,11 +262,16 @@ are dead.
 
 Exactly one scene per lesson is `capstone: true`. It is the assessment, so:
 
-- **Randomized parameters per attempt.** `params` must still be a plain object
-  (CONTRACT §1), so expose the re-roll as a **separate `rollParams(seed)`**
-  function that returns a fresh params object, and set `params: rollParams(1)`
-  as the seed-1 draw. `rollParams` rides as a tolerated extra key. **Quality's
-  harness binds to the name `rollParams`** — keep it.
+- **Randomized parameters per attempt — via the official seam** (CONTRACT
+  v1.1 §1/§8): give the scene a **`randomize(rng)`** function that takes an
+  `rng()` in `[0,1)` and returns a params patch (plain `{name: value}`). The
+  runtime rerolls each attempt with `controller.newAttempt(seed)`, which calls
+  `randomize(makeRng(seed))` and writes the patch **through the atoms** — so
+  it is deterministic under an explicit seed (testable) and the one-way flow
+  holds. `params` must still be a plain object (CONTRACT §1): set
+  `params: randomize(makeRng(1))` so the initial draw is seed-1 **and every
+  key `randomize` returns has an atom for the patch to write through**
+  (`newAttempt` only writes keys that already exist as atoms).
 - **Tolerance + hold-time, no hints.** Gate each target with a band and a
   `hold`; **omit `hint`**. See `dot.capstone`.
 - **Map the weak-area tags.** The capstone's goals must carry the lesson's old
@@ -281,7 +298,8 @@ Exactly one scene per lesson is `capstone: true`. It is the assessment, so:
 **Don't**
 - Don't import a renderer, canvas, or the DOM.
 - Don't invent an entity kind or use `handle: true` — both fail validation.
-- Don't pass a function as `params` (use `rollParams` for the capstone).
+- Don't pass a function as `params` (the capstone rerolls via `randomize(rng)`,
+  CONTRACT v1.1 — never invent your own reroll hook; `mountScene` won't call it).
 - Don't let a goal be true at load, or be impossible to reach.
 - Don't write a 4th caption sentence — split the scene instead.
 - Don't build a game whose fun is separable from the math.

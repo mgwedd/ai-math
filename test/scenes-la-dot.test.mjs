@@ -14,10 +14,13 @@
      impossible goal is worse than an auto-completing one);
    - weak-area TAG MIGRATION: the capstone carries the old quiz's three
      tags so the spaced-review loop survives;
-   - capstone re-roll HOOK (rollParams) that quality's harness binds to. */
+   - the OFFICIAL capstone reroll seam (CONTRACT v1.1 §1/§8):
+     randomize(makeRng(seed)) determinism/distinctness, and
+     controller.newAttempt(seed) rerolling the mounted scene. */
 import { describe, it, expect, beforeAll } from 'vitest';
 
 let SCENES, validateScenes, toAtoms, view, snapshot;
+let makeRng, mountScene, createNullBackend;
 let scenesForLesson, capstoneFor, validateSceneLessons;
 
 const LESSON = 'la-dot';
@@ -36,7 +39,8 @@ const angleOf = (v) => Math.atan2(v.y, v.x);
 
 beforeAll(async () => {
   const kit = await import('../lib/scene/index.js');
-  ({ SCENES, validateScenes, toAtoms, view, snapshot } = kit);
+  ({ SCENES, validateScenes, toAtoms, view, snapshot,
+     makeRng, mountScene, createNullBackend } = kit);
   const res = await import('../lib/curriculum/scenes/index.js');   // registers la-dot scenes
   ({ scenesForLesson, capstoneFor, validateSceneLessons } = res);
 });
@@ -99,7 +103,7 @@ describe('THE GOAL-BASELINE INVARIANT: nothing is satisfied at load', () => {
     const cap = capstoneFor(LESSON);
     const offenders = [];
     for (let seed = 1; seed <= 200; seed++) {
-      const s0 = cap.rollParams(seed);
+      const s0 = cap.randomize(makeRng(seed));
       cap.goals.forEach((g, i) => { if (g.predicate(s0)) offenders.push(seed + '#' + i); });
     }
     expect(offenders).toEqual([]);
@@ -166,7 +170,7 @@ describe('REACHABILITY: every goal has a satisfying state', () => {
   it('dot.capstone — every target reachable for many seeds', () => {
     const cap = capstoneFor(LESSON);
     for (let seed = 1; seed <= 50; seed++) {
-      const p = cap.rollParams(seed);
+      const p = cap.randomize(makeRng(seed));
       const bForDot = scale(p.a, p.dotTarget / dot(p.a, p.a));            // dot(a,b)=T
       const bForCos = fromPolar(1, angleOf(p.a) + Math.acos(p.cosTarget)); // cos=C
       const bForAng = fromPolar(1, angleOf(p.a) + (p.angTarget * Math.PI) / 180);
@@ -177,18 +181,32 @@ describe('REACHABILITY: every goal has a satisfying state', () => {
   });
 });
 
-describe('capstone: weak-area tag migration + re-roll hook', () => {
+describe('capstone: weak-area tag migration + the official reroll seam', () => {
   it('carries the old quiz’s three weak-area tags', () => {
     const tags = capstoneFor(LESSON).goals.map((g) => g.tag);
     expect(new Set(tags)).toEqual(new Set(['dot product arithmetic', 'cosine similarity', 'sign vs angle']));
     for (const g of capstoneFor(LESSON).goals) expect(typeof g.focus).toBe('string');
   });
-  it('rollParams(seed) is a re-roll hook that varies params across attempts', () => {
+  it('randomize(makeRng(seed)) is deterministic per seed, distinct across seeds', () => {
     const cap = capstoneFor(LESSON);
-    expect(typeof cap.rollParams).toBe('function');
-    const draws = [1, 2, 3, 4, 5].map((seed) => JSON.stringify(cap.rollParams(seed)));
-    expect(new Set(draws).size).toBe(draws.length);       // deterministic per seed, distinct across seeds
-    expect(cap.rollParams(7)).toEqual(cap.rollParams(7)); // same seed → same draw
+    expect(typeof cap.randomize).toBe('function');        // CONTRACT v1.1 §1 seam
+    const draws = [1, 2, 3, 4, 5].map((seed) => JSON.stringify(cap.randomize(makeRng(seed))));
+    expect(new Set(draws).size).toBe(draws.length);       // distinct across seeds
+    expect(cap.randomize(makeRng(7))).toEqual(cap.randomize(makeRng(7))); // same seed → same draw
+  });
+  it('params is the seed-1 draw, so every randomize key has an atom to write through', () => {
+    const cap = capstoneFor(LESSON);
+    expect(cap.params).toEqual(cap.randomize(makeRng(1)));
+  });
+  it('controller.newAttempt(seed) rerolls the mounted capstone (CONTRACT §8)', async () => {
+    const cap = capstoneFor(LESSON);
+    const noRaf = { raf: () => 0, caf: () => {} };        // never tick; we only exercise newAttempt
+    const c = await mountScene(cap, null, { backend: createNullBackend(), ...noRaf });
+    const s42 = c.newAttempt(42);
+    expect(s42).toEqual(cap.randomize(makeRng(42)));      // flows through the atoms, deterministic
+    expect(c.snapshot()).toEqual(s42);                    // atoms actually hold the reroll
+    cap.goals.forEach((g) => expect(g.predicate(s42)).toBe(false)); // fresh attempt is baseline-clean
+    c.destroy();
   });
   it('has at least one hold>0 goal (drive-by passes are blocked)', () => {
     expect(capstoneFor(LESSON).goals.some((g) => g.hold > 0)).toBe(true);
