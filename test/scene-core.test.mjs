@@ -10,13 +10,49 @@
      baseline eval + kind/handle checks.
    - scene runtime: mountScene wires params->entities->diff->backend against
      a headless null backend; a param write drives a re-render. */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   param, vec, view, snapshot, toAtoms, makeRng,
-  grid, vector, point, segment, label, polygon,
+  grid, vector, point, segment, label, polygon, angleArc,
   diff, createFrameDriver, createSpace, createNullBackend,
   registerScene, validateScenes, SCENES, mountScene, goal, visited, handle,
 } from '../lib/scene/index.js';
+import { arcSweep } from '../lib/scene/renderer/draw.js';
+
+/* ---- a mock 'pixi.js' so the Pixi backend's singleton + context-loss listener
+   lifecycle can be exercised in the node env (no real WebGL). Only the surface
+   createPixiBackend()/getApp() touch is stubbed; the canvas tracks its own live
+   listener count so leak-on-remount is directly observable. ---- */
+vi.mock('pixi.js', () => {
+  class Graphics {
+    clear(){ return this; } moveTo(){ return this; } lineTo(){ return this; }
+    arc(){ return this; } stroke(){ return this; } fill(){ return this; }
+    circle(){ return this; } rect(){ return this; } poly(){ return this; } destroy(){}
+  }
+  class Container {
+    constructor(){ this.children = []; this.parent = null; }
+    addChild(c){ this.children.push(c); if(c) c.parent = this; return c; }
+    removeChild(c){ this.children = this.children.filter(x => x !== c); if(c) c.parent = null; return c; }
+    destroy(){}
+  }
+  class Text { constructor(o){ this.text = o && o.text; this.anchor = { set(){} }; this.x = 0; this.y = 0; } destroy(){} }
+  class TextStyle { constructor(o){ Object.assign(this, o || {}); } }
+  function makeCanvas(){
+    const handlers = {};
+    return {
+      _count: 0, parentNode: null,
+      addEventListener(type, fn){ (handlers[type] || (handlers[type] = new Set())).add(fn); this._count++; },
+      removeEventListener(type, fn){ if(handlers[type] && handlers[type].delete(fn)) this._count--; },
+      _emit(type, e){ if(handlers[type]) for(const fn of [...handlers[type]]) fn(e || { preventDefault(){} }); },
+    };
+  }
+  class Application {
+    constructor(){ this.stage = new Container(); this.destroyed = false; }
+    async init(){ this.canvas = makeCanvas(); this.renderer = { type: 'webgl', resolution: 1, resize(){} }; }
+    destroy(){ this.destroyed = true; this.canvas = null; }
+  }
+  return { Application, Container, Graphics, Text, TextStyle };
+});
 
 /* ---- a controllable rAF so driver tests are deterministic (no real clock) ---- */
 function fakeRaf(){
@@ -250,5 +286,161 @@ describe('v1.2 learner-input gate seam', () => {
     c.newAttempt(1);
     expect(c.hasLearnerInput()).toBe(false);          // fresh capstone attempt requires fresh input
     c.destroy();
+  });
+});
+
+/* ============================ RE-RELEASE FIXES ============================ */
+
+describe('makeRng respects an explicit seed 0 (falsy-default bug)', () => {
+  it('makeRng(0) is deterministic and DISTINCT from makeRng(1)', () => {
+    const a0 = makeRng(0), b0 = makeRng(0);
+    const seqA = [a0(), a0(), a0()], seqB = [b0(), b0(), b0()];
+    expect(seqA).toEqual(seqB);                        // same explicit seed -> same stream
+    expect(makeRng(0)()).not.toBe(makeRng(1)());       // seed 0 honored, not swapped for the constant/seed-1 stream
+    expect(seqA.every(x => x >= 0 && x < 1)).toBe(true);
+  });
+});
+
+describe('diff rejects duplicate entity keys (authoring error is loud)', () => {
+  it('throws naming the offending key', () => {
+    const dup = [point(vec(0, 0), { key: 'p' }), point(vec(1, 1), { key: 'p' })];
+    expect(() => diff([], dup)).toThrow(/duplicate entity key `p`/);
+  });
+  it('distinct keys still diff cleanly', () => {
+    const ok = [point(vec(0, 0), { key: 'a' }), point(vec(1, 1), { key: 'b' })];
+    expect(diff([], ok).map(o => o.type)).toEqual(['add', 'add']);
+  });
+});
+
+describe('grid() rejects loop-hanging step/extent', () => {
+  it('throws on negative, zero, or non-finite step', () => {
+    expect(() => grid({ step: -1 })).toThrow(/step/);
+    expect(() => grid({ step: 0 })).toThrow(/step/);
+    expect(() => grid({ step: Infinity })).toThrow(/step/);
+  });
+  it('throws on a non-finite extent', () => {
+    expect(() => grid({ extent: Infinity })).toThrow(/extent/);
+  });
+  it('accepts sane defaults', () => {
+    expect(grid().step).toBe(1); expect(grid({ step: 0.5, extent: 4 }).extent).toBe(4);
+  });
+});
+
+describe('plane2 resize guards degenerate dimensions (no NaN)', () => {
+  it('resize(0,0) is a no-op that keeps the last good layout', () => {
+    const s = createSpace('plane2', { extent: 5 }).resize(400, 400, 1);
+    s.resize(0, 0, 1);                                 // degenerate — must not poison scale
+    const o = s.toScreen(vec(0, 0)), w = s.toWorld({ px: 240, py: 200 });
+    expect(Number.isFinite(o.px) && Number.isFinite(o.py)).toBe(true);
+    expect(Number.isFinite(w.x) && Number.isFinite(w.y)).toBe(true);
+    expect(o).toEqual({ px: 200, py: 200 });           // retained 400x400 layout
+    const b = s.bounds();
+    expect(Object.values(b).every(Number.isFinite)).toBe(true);
+  });
+});
+
+describe('null backend does not grow op history unbounded (prod free-run)', () => {
+  it('records ops only when { record:true }', () => {
+    const off = createNullBackend();
+    const on = createNullBackend({ record: true });
+    const ops = diff([], [point(vec(0, 0), { key: 'p' })]);
+    off.apply(ops); on.apply(ops);
+    expect(off._applied.length).toBe(0);               // default: no unbounded history
+    expect(on._applied.length).toBe(1);                // opt-in introspection still works
+    expect(off._objects.get('p')).toBeTruthy();        // display-list mirror is unaffected
+  });
+});
+
+describe('angleArc draws the MINOR arc, never the reflex one', () => {
+  it('arcSweep normalizes to (-pi, pi] so |sweep| <= pi', () => {
+    expect(arcSweep(0, Math.PI / 2)).toBeCloseTo(Math.PI / 2, 9);
+    expect(Math.abs(arcSweep(0, 1.75 * Math.PI))).toBeLessThanOrEqual(Math.PI + 1e-9); // 315deg -> -45deg
+    expect(arcSweep(0, 1.75 * Math.PI)).toBeCloseTo(-Math.PI / 4, 9);
+    expect(Math.abs(arcSweep(-3, 3))).toBeLessThanOrEqual(Math.PI + 1e-9);             // wrap across pi
+  });
+});
+
+describe('mountScene backend detection: factory vs instance (defect 14)', () => {
+  // A minimal recording backend + a factory that tracks how many it made.
+  function recordingBackend(){
+    const objects = new Map(); let space = null, lostCb = null, unmounted = false;
+    return {
+      mountCanvas(){}, resize(){}, setSpace(s){ space = s; }, clear(){ objects.clear(); },
+      apply(list){ for(const op of list){ if(op.type === 'remove') objects.delete(op.key); else objects.set(op.key, op.entity); } },
+      onContextLost(fn){ lostCb = fn; }, unmount(){ unmounted = true; }, destroy(){},
+      _objects: objects, get _space(){ return space; }, get _unmounted(){ return unmounted; },
+      _emitContextLost(){ if(lostCb) lostCb(); },
+    };
+  }
+  const spec = { id: 'rt.detect', space: 'plane2', params: { a: vec(1, 0) }, entities: (p) => [vector(p.a, { key: 'v' })] };
+  const flush = () => new Promise(r => setTimeout(r, 0));
+
+  it('a FACTORY passed as backend is resolved and mounted (not mis-taken for an instance)', async () => {
+    const made = []; const factory = () => { const b = recordingBackend(); made.push(b); return b; };
+    const f = fakeRaf();
+    const c = await mountScene(spec, null, { backend: factory, raf: f.raf, caf: f.caf });
+    f.tick(16);
+    expect(made.length).toBe(1);
+    expect(made[0]._space).not.toBe(null);                 // setSpace() succeeded — old code threw here
+    expect(made[0]._objects.get('v').v).toEqual({ x: 1, y: 0 });
+    c.destroy();
+  });
+
+  it('an INSTANCE passed as backend is used as-is', async () => {
+    const inst = recordingBackend(); const f = fakeRaf();
+    const c = await mountScene(spec, null, { backend: inst, raf: f.raf, caf: f.caf });
+    f.tick(16);
+    expect(inst._space).not.toBe(null);
+    expect(inst._objects.get('v').v).toEqual({ x: 1, y: 0 });
+    c.destroy();
+  });
+
+  it('context loss unmounts the old backend, rebuilds via the factory, and replays once', async () => {
+    const made = []; const factory = () => { const b = recordingBackend(); made.push(b); return b; };
+    const f = fakeRaf();
+    const c = await mountScene(spec, null, { backend: factory, raf: f.raf, caf: f.caf });
+    f.tick(16);
+    expect(made.length).toBe(1);
+    made[0]._emitContextLost();                            // simulate WebGL context loss
+    await flush();
+    expect(made.length).toBe(2);                          // rebuilt via the factory
+    expect(made[0]._unmounted).toBe(true);                // old backend torn down (no leak)
+    f.tick(16);                                            // replay from params
+    expect(made[1]._objects.get('v').v).toEqual({ x: 1, y: 0 });
+    made[1]._emitContextLost();                            // recovery was RE-ARMED on the new backend
+    await flush();
+    expect(made.length).toBe(3);
+    expect(made[1]._unmounted).toBe(true);
+    c.destroy();
+  });
+});
+
+describe('Pixi backend context-loss listener lifecycle (defects 1-3)', () => {
+  it('adds exactly one listener per backend and removes it on unmount (no accumulation)', async () => {
+    const { createPixiBackend, destroyPixiSingleton } = await import('../lib/scene/renderer/pixi.js');
+    destroyPixiSingleton();                               // clean singleton for a deterministic start
+    const b1 = await createPixiBackend();
+    const canvas = b1._app.canvas;
+    expect(canvas._count).toBe(1);                        // one listener for the first backend
+    const b2 = await createPixiBackend();                 // same shared singleton canvas
+    expect(canvas._count).toBe(2);                        // each active backend arms exactly one
+    b1.unmount();
+    expect(canvas._count).toBe(1);                        // removed on unmount — the leak is fixed
+    b2.unmount();
+    expect(canvas._count).toBe(0);                        // net zero: no listener survives teardown
+    destroyPixiSingleton();
+  });
+
+  it('destroyPixiSingleton re-creates the Application so a lost context is actually replaced', async () => {
+    const { createPixiBackend, destroyPixiSingleton } = await import('../lib/scene/renderer/pixi.js');
+    destroyPixiSingleton();
+    const b1 = await createPixiBackend();
+    const app1 = b1._app;
+    b1.unmount();
+    destroyPixiSingleton();                               // tear the singleton down (was dead code before the fix)
+    const b2 = await createPixiBackend();
+    expect(b2._app).not.toBe(app1);                       // getApp() built a FRESH app, not the cached one
+    expect(app1.destroyed).toBe(true);
+    b2.unmount(); destroyPixiSingleton();
   });
 });
