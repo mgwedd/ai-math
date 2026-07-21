@@ -1,8 +1,9 @@
 /* Fixed-timestep simulation loop (lib/scene/sim.js).
  *
- * Every test drives a fabricated `now` (ms) sequence — no real time — proving
- * the loop is deterministic: accumulator behaviour at odd deltas, the panic
- * cap, the spiral-of-death guard, pause/resume, and visibility auto-pause. */
+ * The sim is a driver SOURCE: the driver calls advance(dt) with dt in SECONDS
+ * (CONTRACT.md §5). Every test drives a fabricated dt sequence — no real time —
+ * proving determinism: accumulator behaviour at odd deltas, the panic cap, the
+ * spiral-of-death guard, pause/resume, and visibility auto-pause. */
 import { describe, it, expect } from 'vitest';
 import { createSim, defaultVisibility } from '../lib/scene/sim.js';
 
@@ -18,51 +19,50 @@ function fakeVisibility() {
 }
 
 describe('createSim — fixed timestep', () => {
-  it('runs exactly N steps for N*dt of elapsed time', () => {
-    const dt = 1 / 60; // ~16.667 ms
+  it('runs exactly N steps for N frames of one dt', () => {
+    const dt = 1 / 60;
     let calls = 0;
     const s = createSim(() => { calls += 1; }, { dt });
-    // first tick just baselines (dt=0)
-    s.tick(0);
-    // advance exactly 10 frames of dt
-    for (let i = 1; i <= 10; i++) s.tick(i * dt * 1000);
+    for (let i = 0; i < 10; i++) s.advance(dt);
     expect(calls).toBe(10);
     expect(s.steps).toBe(10);
+  });
+
+  it('accepts {hz} as an alternative to {dt}', () => {
+    let calls = 0;
+    const s = createSim(() => { calls += 1; }, { hz: 50 }); // dt = 20ms
+    s.advance(0.1); // 100ms -> 5 steps
+    expect(calls).toBe(5);
   });
 
   it('passes the fixed dt (seconds) to the step fn, not the frame delta', () => {
     const dt = 1 / 50;
     const seen = [];
     const s = createSim((d) => seen.push(d), { dt });
-    s.tick(0);
-    s.tick(100); // 100ms of real frame => 5 steps of 20ms
+    s.advance(0.1); // 100ms frame -> 5 steps of 20ms
     expect(seen).toHaveLength(5);
     expect(seen.every((d) => d === dt)).toBe(true);
   });
 
-  it('carries the accumulator remainder across ticks', () => {
+  it('carries the accumulator remainder across frames', () => {
     const dt = 1 / 100; // 10 ms step
     let calls = 0;
     const s = createSim(() => { calls += 1; }, { dt });
-    s.tick(0);
-    s.tick(7); // acc=7  -> 0 steps
+    s.advance(0.007); // acc 7ms -> 0 steps
     expect(calls).toBe(0);
-    s.tick(14); // acc=14 -> 1 step, remainder 4
+    s.advance(0.007); // acc 14ms -> 1 step, remainder 4ms
     expect(calls).toBe(1);
-    s.tick(20); // +6 -> acc 10 -> 1 step
+    s.advance(0.006); // acc 10ms -> 1 step
     expect(calls).toBe(2);
-    // alpha reflects leftover accumulator in [0,1)
     expect(s.alpha).toBeGreaterThanOrEqual(0);
     expect(s.alpha).toBeLessThan(1);
   });
 
   it('caps a huge frame delta (panic cap) instead of catching up forever', () => {
-    const dt = 1 / 60; // 16.667 ms
+    const dt = 1 / 60;
     let calls = 0;
-    // generous maxSteps so the cap (not the step guard) is what limits us
     const s = createSim(() => { calls += 1; }, { dt, maxFrame: 0.25, maxSteps: 1000 });
-    s.tick(0);
-    s.tick(5000); // 5 seconds stalled -> clamped to 250ms
+    s.advance(5.0); // 5s stall (unclamped) -> clamped to 250ms
     // 250ms / (1000/60)ms = exactly 15 steps, not 300
     expect(calls).toBe(15);
   });
@@ -71,28 +71,24 @@ describe('createSim — fixed timestep', () => {
     const dt = 1 / 60;
     let calls = 0;
     const s = createSim(() => { calls += 1; }, { dt, maxFrame: 10, maxSteps: 3 });
-    s.tick(0);
-    s.tick(1000); // would be 60 steps; capped at 3, backlog dropped
+    s.advance(1.0); // would be 60 steps; capped at 3, backlog dropped
     expect(calls).toBe(3);
-    // accumulator was reset, so the next normal frame yields ~1 step
-    s.tick(1000 + dt * 1000);
+    s.advance(dt); // clean frame -> ~1 step
     expect(calls).toBe(4);
   });
 
-  it('does not step while paused and rebaselines on resume (no burst)', () => {
+  it('does not step while paused and resumes without a burst', () => {
     const dt = 1 / 60;
     let calls = 0;
     const s = createSim(() => { calls += 1; }, { dt });
-    s.tick(0);
-    s.tick(dt * 1000); // 1 step
+    s.advance(dt); // 1 step
     expect(calls).toBe(1);
     s.pause();
-    s.tick(10000); // huge gap while paused -> ignored
+    s.advance(10); // huge gap while paused -> ignored
     expect(calls).toBe(1);
     expect(s.active()).toBe(false);
     s.resume();
-    s.tick(10000); // resume baseline, dt=0
-    s.tick(10000 + dt * 1000); // one clean step
+    s.advance(dt); // one clean step, no catch-up
     expect(calls).toBe(2);
   });
 
@@ -101,27 +97,25 @@ describe('createSim — fixed timestep', () => {
     const vis = fakeVisibility();
     let calls = 0;
     const s = createSim(() => { calls += 1; }, { dt, visibility: vis });
-    s.tick(0);
-    s.tick(dt * 1000);
+    s.advance(dt);
     expect(calls).toBe(1);
     vis.set(true); // hidden
     expect(s.active()).toBe(false);
-    s.tick(60000); // a minute in the background
-    expect(calls).toBe(1); // nothing accumulated
-    vis.set(false); // visible again -> rebaselined
+    s.advance(60); // a minute in the background -> nothing
+    expect(calls).toBe(1);
+    vis.set(false); // visible again
     expect(s.active()).toBe(true);
-    s.tick(60000); // baseline
-    s.tick(60000 + dt * 1000); // one step, NOT 3600
+    s.advance(dt); // one step, NOT 3600
     expect(calls).toBe(2);
   });
 
-  it('is deterministic: identical now-sequences produce identical step counts', () => {
+  it('is deterministic: identical dt sequences produce identical step counts', () => {
     const dt = 1 / 60;
-    const nows = [0, 5, 22, 40, 41, 100, 250, 251, 900];
+    const deltas = [0.005, 0.017, 0.018, 0.001, 0.059, 0.25, 0.001, 0.9];
     const run = () => {
       let c = 0;
       const s = createSim(() => { c += 1; }, { dt });
-      nows.forEach((n) => s.tick(n));
+      deltas.forEach((d) => s.advance(d));
       return c;
     };
     expect(run()).toBe(run());
@@ -138,12 +132,13 @@ describe('createSim — fixed timestep', () => {
     expect(s.active()).toBe(false);
   });
 
-  it('never reads real time (imports cleanly, ticks with injected now only)', () => {
-    // A smoke check: no visibility adapter, node env has no document; the
-    // default adapter must degrade gracefully.
+  it('ignores zero / negative dt and never reads real time', () => {
     const vis = defaultVisibility();
-    expect(vis.hidden()).toBe(false);
-    const s = createSim(() => {}, {});
-    expect(() => s.tick(0)).not.toThrow();
+    expect(vis.hidden()).toBe(false); // node: no document
+    let calls = 0;
+    const s = createSim(() => { calls += 1; }, { dt: 1 / 60 });
+    s.advance(0);
+    s.advance(-1);
+    expect(calls).toBe(0);
   });
 });
