@@ -1,4 +1,4 @@
-/* Scene Kit invariants — the real-kit test harness (CONTRACT.md v1).
+/* Scene Kit invariants — the real-kit test harness (CONTRACT.md v1.2).
  *
  * These tests bind the FROZEN contract to executable checks. They skipIf the
  * relevant peer module hasn't landed on this branch yet, so the base suite is
@@ -11,7 +11,9 @@
  *   3. GOAL BASELINE invariant — first eval never credits (§7/§8)
  *   4. diff correctness — add/update/remove/no-op ops (§4)
  *   5. tween/sim determinism via injected clock (§5)
- *   6. capstone randomization — params vary; tolerance+hold enforced (§1, VF §8)
+ *   6. capstone reroll — real randomize(rng)+newAttempt(seed) seam (§1/§8, VF §8)
+ *   7. LEARNER-INPUT GATE — controller seam + no credit before input (v1.2 §7/§8)
+ *   8. visited() goal type — descriptor shape + required>=1 rejection (v1.2 §7)
  *
  * Run against a peer branch:  from this worktree,
  *   git checkout origin/ai/p0-kit-core -- lib/scene   # or fetch+merge the branch
@@ -31,7 +33,7 @@ if (!HAVE_KIT) {
   console.warn('[scene-kit] lib/scene not present on this branch — real-kit invariant tests are SKIPPED. Integrate a peer branch to activate.');
 }
 
-let registry, params, entitiesMod, diffMod;
+let registry, params, entitiesMod, diffMod, pub;
 beforeAll(async () => {
   if (!HAVE_KIT) return;
   installSceneDom();
@@ -39,6 +41,9 @@ beforeAll(async () => {
   params = await importScene('params.js');
   entitiesMod = await importScene('entities.js');
   diffMod = await importScene('diff.js');
+  // Public surface (§8 mountScene, null backend, param/vec/visited/makeRng) — the
+  // REAL controller for the v1.2 gate + capstone-reroll tests (no vacuous stubs).
+  pub = await importScene('index.js');
 });
 
 /* ===================== 1. registerScene validation + idempotency ========== */
@@ -204,52 +209,59 @@ describe.skipIf(!HAVE_KIT || !scenePresent('diff.js'))('diff — keyed add/updat
 });
 
 /* ================= 5. driver / tween / sim determinism =================== */
-describe.skipIf(!HAVE_KIT || !motionPresent())('tween/sim determinism via injected clock (§5)', () => {
-  let clockMod, driverMod, paramsMod;
+// Bound to motion's REAL seam (verified against lib/scene/clock.js @ 24257d3):
+// `createClock({driver}).tween(param, to, {dur, ease})`. Motion attaches ONE
+// driver source per clock (dirty-flag) and advances every live timeline in that
+// source's fn(t,dt); dt is SECONDS, the timeline playhead is ms. There is no
+// standalone `tween(atom, to, {driver})` export — the previous harness guessed
+// that shape, caught the TypeError, and returned null, so this determinism
+// invariant was passing VACUOUSLY. Now it drives the real clock through a fake
+// driver stand-in and asserts a bit-identical trajectory + convergence.
+describe.skipIf(!HAVE_KIT || !motionPresent())('tween determinism via the real createClock seam (§5)', () => {
+  let clockMod, paramsMod;
   beforeAll(async () => {
     installSceneDom();
     clockMod = await importScene('clock.js');
-    driverMod = await importScene('driver.js');
     paramsMod = await importScene('params.js');
   });
 
   it('a tween produces an identical param trajectory for an identical dt feed', async () => {
-    if (!clockMod || !driverMod || !paramsMod) return;
+    if (!clockMod || !paramsMod) return;
     const { param } = paramsMod;
-    const { tween } = clockMod;
-    // Drive the same tween twice with the SAME dt sequence via a fake source
-    // pump; the recorded trajectories must be bit-identical (no wall-clock leak).
+    const { createClock } = clockMod;
+    expect(typeof createClock, 'motion must export createClock (§5 seam)').toBe('function');
+
+    // Same dt feed twice; trajectories must be bit-identical (no wall-clock leak).
+    // Feed sums to 150ms > the 100ms tween, so it also fully converges to target.
     const dts = [0.016, 0.016, 0.02, 0.016, 0.016, 0.05, 0.016];
     const runOnce = () => {
       const a = param(0);
-      const traj = [];
-      // Minimal driver stand-in honoring the §5 addSource/now contract, fed by
-      // a fakeClock so tween sees deterministic (t, dt).
       const sources = [];
-      const clock = fakeClock();
+      const fc = fakeClock();
+      // Driver stand-in honoring §5 addSource/now; createClock attaches exactly
+      // one source and pumps every live timeline through it.
       const driver = {
-        now: () => clock.now(),
+        now: () => fc.now(),
         requestFrame() {},
         addSource(fn) { sources.push(fn); return { release() { const i = sources.indexOf(fn); if (i >= 0) sources.splice(i, 1); } }; },
         pause() {}, resume() {}, isPaused: () => false, destroy() {},
       };
-      // tween may take the driver explicitly or via a module seam; try the
-      // common explicit-injection signature, else skip gracefully.
-      let t;
-      try { t = tween(a, 1, { dur: 0.1, driver }); } catch { return null; }
+      const clock = createClock({ driver });
+      clock.tween(a, 1, { dur: 100 });   // dur ms
+      const traj = [];
       for (const dt of dts) {
-        clock.tick(dt);
-        for (const fn of [...sources]) fn(clock.now(), dt);
+        fc.tick(dt);
+        for (const fn of [...sources]) fn(fc.now(), dt);  // sources run before render (§5)
         traj.push(a.get());
       }
+      clock.dispose();
       return traj;
     };
     const r1 = runOnce();
     const r2 = runOnce();
-    if (r1 == null || r2 == null) return; // signature mismatch — informational only
-    expect(r1).toEqual(r2);
-    // and it actually moved toward the target
-    expect(r1.at(-1)).toBeGreaterThan(0);
+    expect(r1, 'deterministic: identical dt feed -> identical trajectory').toEqual(r2);
+    expect(r1.at(-1), 'tween moved off the start value').toBeGreaterThan(0);
+    expect(r1.at(-1), 'tween converged to target by end of feed (150ms > 100ms dur)').toBe(1);
   });
 });
 
@@ -324,25 +336,187 @@ describe.skipIf(!interactionPresent())('goal baseline — first evaluation never
   });
 });
 
-/* ===================== 6. capstone randomization ========================= */
-describe.skipIf(!HAVE_KIT)('capstone — randomized params across attempts + tolerance/hold (§1, VF §8)', () => {
-  it('capstone scenes vary their params across fresh attempts and gate on tolerance+hold', async () => {
+/* ===================== 6. capstone reroll — REAL seam ==================== */
+// Bound to the FROZEN v1.1/v1.2 seam: scene-level `randomize(rng)` +
+// `controller.newAttempt(seed)` (CONTRACT §1 ~L82, §8 ~L435). newAttempt calls
+// spec.randomize(makeRng(seed)), writes THROUGH the atoms, and returns the
+// applied snapshot; it is deterministic under an explicit seed and resets the
+// learner-input gate. No vacuous stubs — we mount the REAL controller on the
+// null backend and drive the actual method.
+describe.skipIf(!HAVE_KIT)('capstone reroll — real randomize(rng)+newAttempt(seed) seam (§1/§8)', () => {
+  const mountNull = async (spec) =>
+    pub.mountScene(spec, null, { backend: pub.createNullBackend() });
+
+  it('newAttempt(seed) rerolls params through the atoms: deterministic per seed, varies across seeds', async () => {
+    // A SYNTHETIC capstone with a real randomize — proves the seam end-to-end
+    // through the real mountScene controller even when no flagship scene is
+    // integrated on this branch.
+    const spec = {
+      id: '__q_cap__', space: 'plane2', capstone: true,
+      params: { a: pub.vec(0, 0), k: pub.param ? pub.param(0) : 0 },
+      entities: () => [],
+      randomize: (rng) => ({ a: pub.vec(rng() * 4 - 2, rng() * 4 - 2), k: rng() }),
+    };
+    const c = await mountNull(spec);
+    try {
+      const s7a = c.newAttempt(7);
+      const s7b = c.newAttempt(7);
+      expect(s7b, 'same seed -> identical reroll (deterministic)').toEqual(s7a);
+      const s9 = c.newAttempt(9);
+      expect(s9, 'distinct seed -> distinct reroll').not.toEqual(s7a);
+      // reroll actually flowed THROUGH the atoms (one-way flow), so the live
+      // snapshot equals the returned patch-applied snapshot.
+      expect(c.snapshot()).toEqual(s9);
+    } finally { c.destroy(); }
+  });
+
+  it('every SHIPPED capstone scene rerolls across attempts AND enforces a hold (VF §8 integrity)', async () => {
     const { SCENES } = registry;
     const capstones = (SCENES || []).filter((s) => s.capstone);
-    if (capstones.length === 0) return; // flagship's la-dot capstone not integrated here yet
+    if (capstones.length === 0) return; // flagship's la-dot capstone not integrated on this branch yet
 
     for (const cap of capstones) {
-      // RANDOMIZATION: CONTRACT v1 has no per-attempt reroll seam (confirmed
-      // contract gap — architect directed kit-core to publish an additive v1.1
-      // naming it). DO NOT guess the hook here; bind this half of the test to
-      // the real name once kit-core.md Handoffs announces v1.1.
-      // TODO(quality): assert params vary across attempts via the v1.1 seam.
-
-      // TOLERANCE + HOLD: at least one capstone goal must carry a hold (>0) so
-      // drive-by passes are impossible (VF §8 assessment integrity).
-      const goals = cap.goals || [];
-      const holds = goals.filter((g) => (g.hold ?? 0) > 0);
+      // HOLD: at least one capstone goal must carry hold>0 (no drive-by pass).
+      const holds = (cap.goals || []).filter((g) => (g.hold ?? 0) > 0);
       expect(holds.length, `${cap.id}: capstone goals must enforce a hold time`).toBeGreaterThan(0);
+
+      // RANDOMIZATION via the real seam: a capstone must reroll (CONTRACT §1/§8).
+      expect(typeof cap.randomize, `${cap.id}: capstone must declare randomize(rng)`).toBe('function');
+      const c = await mountNull(cap);
+      try {
+        const a1 = c.newAttempt(1);
+        const a1again = c.newAttempt(1);
+        expect(a1again, `${cap.id}: seed 1 deterministic`).toEqual(a1);
+        const a2 = c.newAttempt(2);
+        expect(a2, `${cap.id}: params vary across attempts`).not.toEqual(a1);
+      } finally { c.destroy(); }
     }
+  });
+});
+
+/* ================= 7. LEARNER-INPUT GATE (v1.2 §7/§8) ==================== */
+// The gate is kit-core-owned and lives on the CONTROLLER: no goal of ANY type
+// credits until >=1 learner interaction since mount. markLearnerInput() is
+// called by input surfaces only; hasLearnerInput() is consulted by the goals
+// runtime at crediting time; newAttempt() RESETS the gate (fresh capstone
+// attempt = fresh input). We drive the REAL mountScene controller.
+describe.skipIf(!HAVE_KIT)('learner-input gate — controller seam (v1.2 §7/§8)', () => {
+  const gateSpec = () => ({
+    id: '__q_gate__', space: 'plane2',
+    params: { a: pub.vec(1, 0) },
+    entities: () => [],
+    randomize: (rng) => ({ a: pub.vec(rng() * 2, rng() * 2) }),
+  });
+
+  it('hasLearnerInput() is FALSE at mount — nothing can credit before a learner interaction', async () => {
+    const c = await pub.mountScene(gateSpec(), null, { backend: pub.createNullBackend() });
+    try {
+      expect(c.hasLearnerInput(), 'gate closed at mount (mount tweens/auto-sims cannot credit)').toBe(false);
+    } finally { c.destroy(); }
+  });
+
+  it('markLearnerInput() opens the gate and is idempotent', async () => {
+    const c = await pub.mountScene(gateSpec(), null, { backend: pub.createNullBackend() });
+    try {
+      c.markLearnerInput();
+      expect(c.hasLearnerInput()).toBe(true);
+      c.markLearnerInput(); // idempotent — still true, no throw
+      expect(c.hasLearnerInput()).toBe(true);
+    } finally { c.destroy(); }
+  });
+
+  it('newAttempt(seed) RESETS the gate — each attempt requires fresh learner input', async () => {
+    const c = await pub.mountScene(gateSpec(), null, { backend: pub.createNullBackend() });
+    try {
+      c.markLearnerInput();
+      expect(c.hasLearnerInput()).toBe(true);
+      c.newAttempt(3);
+      expect(c.hasLearnerInput(), 'reroll re-closes the gate').toBe(false);
+      // gate reset is independent of whether a randomize exists:
+      c.markLearnerInput();
+      c.newAttempt(); // no seed
+      expect(c.hasLearnerInput()).toBe(false);
+    } finally { c.destroy(); }
+  });
+});
+
+// The RUNTIME half — the goals runtime must actually CONSULT the gate so no
+// goal of any type (state/episode/visited) credits while it is closed. Bound to
+// interaction's shipped surface + the CONTRACT §7 injected `hasLearnerInput`
+// seam. Dormant until the interaction principal lands the gate-aware runtime;
+// activates on integration (re-reviewed against interaction's final SHA).
+describe.skipIf(!interactionPresent())('learner-input gate — goals runtime consults the gate (v1.2 §7)', () => {
+  const loadGoals = async () =>
+    (await importScene('goals.js')) || (await importScene('interaction.js'));
+
+  it('a qualifying learner-driven change does NOT credit while the gate is closed, and DOES once opened', async () => {
+    const mod = await loadGoals();
+    if (!mod?.makeGoals || !mod?.goal) return; // surface renamed — reflag in review
+    const { goal, makeGoals } = mod;
+
+    let gateOpen = false;
+    let credited = 0;
+    const g = makeGoals(
+      [goal('reach a=0', (s) => s.a === 0, { xp: 20 })],
+      { onComplete: () => { credited++; }, hasLearnerInput: () => gateOpen },
+    );
+    g.evaluate({ a: 1 });            // baseline
+    g.evaluate({ a: 0 });            // qualifying but GATE CLOSED — must not credit
+    g.evaluate({ a: 1 });
+    g.evaluate({ a: 0 });            // still closed
+    expect(credited, 'gate closed: no credit despite a qualifying change').toBe(0);
+
+    gateOpen = true;                  // an input surface marked learner input
+    g.evaluate({ a: 1 });
+    g.evaluate({ a: 0 });            // qualifying, gate OPEN -> credits
+    expect(credited, 'gate open: qualifying learner-driven change credits').toBe(1);
+    g.dispose();
+  });
+});
+
+/* ================= 8. visited() goal type — v1.2 §7 ===================== */
+describe.skipIf(!HAVE_KIT)('visited() — descriptor shape + required>=1 rejected at registration (v1.2 §7)', () => {
+  const drop = (id) => { const i = registry.SCENES.findIndex((s) => s.id === id); if (i >= 0) registry.SCENES.splice(i, 1); };
+  const sceneWith = (id, goals) => ({ id, space: 'plane2', params: {}, entities: () => [], goals });
+
+  it('visited(text, keyOf, opts) builds the frozen descriptor shape', () => {
+    const v = pub.visited('try all quadrants', (s) => (s.a > 0 ? 'pos' : 'neg'), { keys: ['pos', 'neg'], xp: 30, hold: 200, tag: 't', focus: 'f' });
+    expect(v.type).toBe('visited');
+    expect(typeof v.keyOf).toBe('function');
+    expect(v.keys).toEqual(['pos', 'neg']);
+    expect(v.required, 'required defaults to keys.length when keys given').toBe(2);
+    expect(v.xp).toBe(30);
+    expect(v.hold).toBe(200);
+  });
+
+  it('registerScene REJECTS required=0 (instant-complete bug) with the scene id in the throw', () => {
+    const { registerScene } = registry;
+    expect(() => registerScene(sceneWith('__q_vis0__', [pub.visited('v', () => 'x', { required: 0, xp: 10 })])))
+      .toThrow(/__q_vis0__/);
+    drop('__q_vis0__');
+  });
+
+  it('registerScene REJECTS required=undefined without a keys set (mandatory required)', () => {
+    const { registerScene } = registry;
+    // No keys + no required => required is undefined => rejected loudly.
+    expect(() => registerScene(sceneWith('__q_visU__', [pub.visited('v', () => 'x', { xp: 10 })])))
+      .toThrow(/__q_visU__/);
+    drop('__q_visU__');
+  });
+
+  it('registerScene REJECTS required > keys.length', () => {
+    const { registerScene } = registry;
+    expect(() => registerScene(sceneWith('__q_visX__', [pub.visited('v', () => 'x', { keys: ['a', 'b'], required: 3, xp: 10 })])))
+      .toThrow(/__q_visX__/);
+    drop('__q_visX__');
+  });
+
+  it('registerScene ACCEPTS a well-formed visited goal (required>=1)', () => {
+    const { registerScene } = registry;
+    expect(() => registerScene(sceneWith('__q_visOk__', [pub.visited('v', () => 'x', { required: 3, xp: 10 })]))).not.toThrow();
+    drop('__q_visOk__');
+    // keys-only form: required defaults to keys.length (>=1) and passes.
+    expect(() => registerScene(sceneWith('__q_visKeys__', [pub.visited('v', () => 'x', { keys: ['a', 'b', 'c'], xp: 10 })]))).not.toThrow();
+    drop('__q_visKeys__');
   });
 });
