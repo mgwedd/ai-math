@@ -111,6 +111,24 @@ describe('makeGoals hold-time', () => {
 });
 
 describe('makeGoals episode outcomes', () => {
+  it('an episode reported BEFORE the first evaluate does not consume the baseline', () => {
+    // Regression (verifier finding): reportEpisode used to set baselined=true,
+    // so a sim scene reporting an outcome during mount made the mount's first
+    // evaluate() a CREDITING pass — a state goal true at the default state
+    // auto-completed on load. Episodes must leave the state-goal baseline alone.
+    const g = makeGoals([
+      goal('true at default', (s) => s.v === 0, { xp: 20 }),
+      episode('any outcome', () => true, { xp: 10 }),
+    ]);
+    g.reportEpisode({});                  // episode lands before first evaluate
+    expect(g.isDone(1)).toBe(true);       // episode itself credits (learner-driven)
+    g.evaluate({ v: 0 });                 // FIRST evaluate — still the baseline
+    expect(g.isDone(0)).toBe(false);      // must NOT credit the state goal
+    g.evaluate({ v: 1 });
+    g.evaluate({ v: 0 });                 // learner returns to qualifying state
+    expect(g.isDone(0)).toBe(true);
+  });
+
   it('credits only on reportEpisode, never on evaluate', () => {
     const g = makeGoals([episode('converge ≤ 8 steps', (ep) => ep.steps <= 8 && ep.converged, { xp: 30 })]);
     g.evaluate({ steps: 3, converged: true });   // evaluate must not touch episodes

@@ -56,6 +56,24 @@ describe('nearest-pick among multiple handles', () => {
     s.el.dispatch('pointerup', pd(1, 1));
   });
 
+  it('a close small-radius handle cannot shadow a reachable larger-radius one', () => {
+    // Regression (verifier finding): nearest() used to take the global min-
+    // distance handle and THEN check its radius — a nearby tiny-radius handle
+    // swallowed the pick even when a farther handle's radius contained the
+    // pointer. The radius check must be per-candidate.
+    const s = fakeSurface();
+    const ix = makeInteraction(s);
+    const small = atomOf(0, 0), big = atomOf(2, 0);
+    ix.handle(small, { hitRadius: 0.2 });
+    ix.handle(big, { hitRadius: 1.5 });
+    // Pointer at (0.8, 0): dist to small = 0.8 (outside its 0.2 radius),
+    // dist to big = 1.2 (inside its 1.5 radius) → big must be picked.
+    s.el.dispatch('pointerdown', pd(0.8, 0));
+    s.el.dispatch('pointermove', pd(3, 1));
+    expect(big.get()).toEqual({ x: 3, y: 1 });
+    expect(small.get()).toEqual({ x: 0, y: 0 });
+  });
+
   it('ignores a pointerdown outside every hit radius', () => {
     const s = fakeSurface();
     const ix = makeInteraction(s);
