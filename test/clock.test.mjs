@@ -48,6 +48,13 @@ describe('easing set', () => {
     expect(EASINGS.cubicOut(0.5)).not.toBeCloseTo(0.5, 3);
     expect(EASINGS.cubicOut(0.5)).toBeGreaterThan(0.5);
   });
+  it('cubic in/out hit exact mid-curve values (not just endpoints)', () => {
+    expect(EASINGS.cubicIn(0.5)).toBeCloseTo(0.125, 9);   // t^3
+    expect(EASINGS.cubicIn(0.25)).toBeCloseTo(0.015625, 9);
+    expect(EASINGS.cubicOut(0.5)).toBeCloseTo(0.875, 9);  // 1-(1-t)^3
+    expect(EASINGS.cubicOut(0.75)).toBeCloseTo(0.984375, 9);
+    expect(EASINGS.cubicInOut(0.25)).toBeCloseTo(0.0625, 9); // 4t^3
+  });
 });
 
 describe('interpolation (morph)', () => {
@@ -142,6 +149,17 @@ describe('tween — writes params through the driver', () => {
     expect(m.get()).toEqual([0.5, -0.5, 0.5, 0.5]);
   });
 
+  it('a matrix morph is exact at multiple scrub positions (and re-scrubbable)', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const m = atom([1, 0, 0, 1]); // identity -> 90° rotation
+    const h = clock.timeline({ param: m, to: [0, -1, 1, 0], dur: 100, ease: 'linear' });
+    h.scrub(0.25); expect(m.get()).toEqual([0.75, -0.25, 0.25, 0.75]);
+    h.scrub(0.75); expect(m.get()).toEqual([0.25, -0.75, 0.75, 0.25]);
+    h.scrub(0.25); expect(m.get()).toEqual([0.75, -0.25, 0.25, 0.75]);
+    h.scrub(0); expect(m.get()).toEqual([1, 0, 0, 1]); // back to identity
+  });
+
   it('respects delay', () => {
     const d = manualDriver();
     const clock = createClock({ driver: d });
@@ -223,6 +241,58 @@ describe('play / pause / scrub on a timeline', () => {
     h.scrub(0.25); expect(p.get()).toBeCloseTo(25, 6); // idempotent on rewind
     h.seek(50); expect(p.get()).toBeCloseTo(50, 6);
   });
+
+  it('backward scrub to 0 restores the original baseline (no drift)', () => {
+    // Regression: rewinding past a track start must re-derive `from` from the
+    // pinned _from0 baseline, never the live (already-tweened) param — else
+    // scrub(.5) -> scrub(0) -> scrub(.5) gives 50, 50, 75 instead of 50, 0, 50.
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const p = atom(0);
+    const h = clock.timeline({ param: p, to: 100, dur: 100, ease: 'linear' });
+    h.scrub(0.5); expect(p.get()).toBeCloseTo(50, 6);
+    h.scrub(0); expect(p.get()).toBeCloseTo(0, 6);
+    h.scrub(0.5); expect(p.get()).toBeCloseTo(50, 6);
+    // and forward playback after the rewind stays correct
+    d.step(0.05); // playhead 100
+    expect(p.get()).toBeCloseTo(100, 6);
+  });
+
+  it('scrubbing a 3-leg sequence back and forth reproduces exact values', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const p = atom(0);
+    const h = clock.timeline({ sequence: [
+      { param: p, to: 10, dur: 100, ease: 'linear' },
+      { param: p, to: 20, dur: 100, ease: 'linear' },
+      { param: p, to: -10, dur: 100, ease: 'linear' },
+    ] });
+    h.seek(150); expect(p.get()).toBeCloseTo(15, 6);  // leg2 half: 10 -> 20
+    h.seek(50); expect(p.get()).toBeCloseTo(5, 6);    // rewound into leg1
+    h.seek(250); expect(p.get()).toBeCloseTo(5, 6);   // leg3 half: 20 -> -10
+    h.seek(150); expect(p.get()).toBeCloseTo(15, 6);  // back again — identical
+    h.seek(0); expect(p.get()).toBeCloseTo(0, 6);     // full rewind to origin
+    h.seek(300); expect(p.get()).toBeCloseTo(-10, 6); // full fast-forward
+  });
+
+  it('seek past a spring start snaps it; rewind re-arms it for live replay', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const a = atom(0); const b = atom(0);
+    const h = clock.timeline({ sequence: [
+      { param: a, to: 10, dur: 100, ease: 'linear' },
+      { param: b, to: 5, spring: true },
+    ] });
+    d.step(0.05); // playhead 50: spring offset not reached — must not pull early
+    expect(b.get()).toBe(0);
+    h.seek(100); // at the spring's offset -> snap (springs aren't scrubbable)
+    expect(b.get()).toBe(5);
+    h.seek(0); // rewind: eased leg back to origin, spring re-armed
+    expect(a.get()).toBeCloseTo(0, 6);
+    for (let i = 0; i < 300; i++) d.step(1 / 60); // replay live: settles again
+    expect(a.get()).toBeCloseTo(10, 6);
+    expect(b.get()).toBeCloseTo(5, 2);
+  });
 });
 
 describe('springs', () => {
@@ -273,13 +343,16 @@ describe('reduced motion', () => {
     expect(done).toBe(true);
     expect(d.running).toBe(false);
   });
-  it('snaps a spring straight to target too', () => {
+  it('snaps a spring straight to target and fires then()', () => {
     const d = manualDriver();
     const clock = createClock({ driver: d, reducedMotion: true });
     const p = atom(0);
-    clock.tween(p, 9, { spring: true });
+    let done = false;
+    clock.tween(p, 9, { spring: true }).then(() => { done = true; });
     d.step(1 / 60);
     expect(p.get()).toBe(9);
+    expect(done).toBe(true);
+    expect(d.running).toBe(false);
   });
   it('exposes the particle-halving flag the kit reads', () => {
     const full = createClock({ driver: manualDriver() });
