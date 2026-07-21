@@ -11,7 +11,7 @@ import { mountScene } from '../lib/scene/scene.js';
 import { createNullBackend } from '../lib/scene/renderer/backend.js';
 import { vec } from '../lib/scene/params.js';
 import { point, vector, curve } from '../lib/scene/entities.js';
-import { goal, episode } from '../lib/scene/seams/goals.js';
+import { goal, episode, visited } from '../lib/scene/seams/goals.js';
 import { attachInteraction, attachGoals } from '../lib/scene/interaction.js';
 
 // ---- fake DOM element for pointer/keyboard (canvas stand-in) ----
@@ -178,6 +178,72 @@ describe('attachInteraction: goals wiring (baseline + input gate end-to-end)', (
     ix.markLearnerInput();                    // DOM control reports input
     c.params.k.set(2);                        // control writes the param
     expect(ix.goals.allDone()).toBe(true);
+    ix.dispose(); c.destroy();
+  });
+});
+
+describe('newAttempt trio — reroll → resetAttempt → baseline re-eval (v1.3 §2)', () => {
+  it('in-flight visited keys do not survive a new attempt; the gate re-closes', async () => {
+    const spec = {
+      id: 't.reroll', space: 'plane2', extent: 6,
+      params: { p: vec(0, 0) },
+      entities: (pv) => [point(pv.p, { key: 'pt', handle: 'p' })],
+      randomize: () => ({ p: vec(0, 0) }),          // deterministic re-center
+    };
+    const { c } = await mountFor(spec);
+    const el = fakeEl();
+    const ix = attachInteraction(c, { el, goalDefs: [
+      visited('visit up and down', (s) => (s.p.y > 2 ? 'up' : s.p.y < -2 ? 'down' : null),
+        { keys: ['up', 'down'], xp: 5 }),
+    ] });
+    // Attempt 1: learner banks 'up'.
+    el.dispatch('pointerdown', px(c, { x: 0, y: 0 }));
+    el.dispatch('pointermove', px(c, { x: 0, y: 3 }));
+    el.dispatch('pointerup', px(c, { x: 0, y: 3 }));
+    expect(ix.goals.allDone()).toBe(false);
+    // Attempt boundary: reroll + reset + baseline, gate closed.
+    ix.newAttempt(7);
+    expect(c.hasLearnerInput()).toBe(false);
+    const p0 = c.params.p.get();
+    expect(p0.x).toBeCloseTo(0, 6); expect(p0.y).toBeCloseTo(0, 6);   // randomize applied
+    // Attempt 2: 'down' alone must NOT complete (attempt-1 'up' must not carry).
+    el.dispatch('pointerdown', px(c, { x: 0, y: 0 }));
+    el.dispatch('pointermove', px(c, { x: 0, y: -3 }));
+    el.dispatch('pointerup', px(c, { x: 0, y: -3 }));
+    expect(ix.goals.allDone()).toBe(false);
+    // Both variants within attempt 2 → done.
+    el.dispatch('pointerdown', px(c, { x: 0, y: -3 }));
+    el.dispatch('pointermove', px(c, { x: 0, y: 3 }));
+    el.dispatch('pointerup', px(c, { x: 0, y: 3 }));
+    expect(ix.goals.allDone()).toBe(true);
+    ix.dispose(); c.destroy();
+  });
+
+  it('a hold armed in attempt 1 cannot credit in attempt 2', async () => {
+    let clock = 0; const timers = [];
+    const spec = {
+      id: 't.rerollhold', space: 'plane2', extent: 6,
+      params: { p: vec(0, 0) },
+      entities: (pv) => [point(pv.p, { key: 'pt', handle: 'p' })],
+      randomize: () => ({ p: vec(0, 0) }),
+    };
+    const { c } = await mountFor(spec);
+    const el = fakeEl();
+    const ix = attachInteraction(c, { el,
+      goalDefs: [goal('hold y>2 for 500ms', (s) => s.p.y > 2, { xp: 10, hold: 500 })],
+      now: () => clock,
+      schedule: (fn, ms) => { const t = { at: clock + ms, fn, dead: false }; timers.push(t); return t; },
+      cancel: (t) => { if (t) t.dead = true; },
+    });
+    const fire = () => timers.splice(0).forEach((t) => { if (!t.dead && t.at <= clock) t.fn(); });
+    // Attempt 1: drag into the qualifying region → hold arms at t=0.
+    el.dispatch('pointerdown', px(c, { x: 0, y: 0 }));
+    el.dispatch('pointermove', px(c, { x: 0, y: 3 }));
+    el.dispatch('pointerup', px(c, { x: 0, y: 3 }));
+    clock = 200;
+    ix.newAttempt(3);                       // boundary at t=200
+    clock = 600; fire();                    // attempt-1 timer due at t=500
+    expect(ix.goals.allDone()).toBe(false); // must not credit into attempt 2
     ix.dispose(); c.destroy();
   });
 });

@@ -74,7 +74,7 @@ Object.assign(globalThis.document, {
 });
 
 let engine, S, go, LESSONS, SCORING;
-let vec, point, kitGoal;
+let vec, point, kitGoal, kitVisited;
 
 beforeAll(async () => {
   await import('../lib/curriculum/index.js');
@@ -82,7 +82,7 @@ beforeAll(async () => {
   const ents = await import('../lib/scene/entities.js');
   const seams = await import('../lib/scene/seams/goals.js');
   const backend = await import('../lib/scene/renderer/backend.js');
-  vec = params.vec; point = ents.point; kitGoal = seams.goal;
+  vec = params.vec; point = ents.point; kitGoal = seams.goal; kitVisited = seams.visited;
   engine = await import('../lib/engine.js');
   ({ S, go, LESSONS, SCORING } = engine);
   engine.setSceneBackend(() => backend.createNullBackend());   // headless: no pixi
@@ -189,6 +189,41 @@ describe('renderScenes: real mountScene + live pointer input', () => {
     btn.onclick();                                  // → showQuiz
     expect(stepBody().querySelector('#qpanel').innerHTML).toContain('QUESTION');
     expect(S.done['sc-quiz']).toBeUndefined();      // completion owned by the quiz
+  });
+
+  it('a zero-goal scene arms advance with no goals box and no mission entry (v1.3 §4)', async () => {
+    addScenesLesson('sc-deco', [mkScene('deco', { goals: [] }), mkScene('real')]);
+    delete S.missions['sc-deco::deco']; delete S.missions['sc-deco::real']; delete S.done['sc-deco'];
+    go('lesson', 'sc-deco');
+    await tick();
+    expect(nextBtn().disabled).toBe(false);            // decorative: nothing to gate
+    expect(nextBtn().textContent).toBe('Next scene →');
+    expect(S.missions['sc-deco::deco']).toBeUndefined();
+    expect(stepBody().querySelector('#scene-goals').children.length).toBe(0);   // no GOALS box
+    expect(stepBody().querySelector('#reattempt').onclick).toBeUndefined();     // non-capstone: no retry affordance
+  });
+
+  it('capstone New attempt: reroll + in-flight reset, attempt-1 progress does not carry (v1.3 §2–3)', async () => {
+    const capSpec = mkScene('vcap', {
+      capstone: true,
+      randomize: () => ({ p: vec(2, 1) }),             // deterministic re-start
+      goals: [kitVisited('visit up and down', (s) => (s.p.y > 2 ? 'up' : s.p.y < -2 ? 'down' : null),
+        { keys: ['up', 'down'], xp: 10 })],
+    });
+    addScenesLesson('sc-retry', [capSpec]);
+    delete S.missions['sc-retry::vcap']; delete S.done['sc-retry'];
+    go('lesson', 'sc-retry');
+    await tick();
+    const rb = stepBody().querySelector('#reattempt');
+    expect(typeof rb.onclick).toBe('function');        // affordance rendered on capstones
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });       // attempt 1: banks 'up'
+    expect(S.missions['sc-retry::vcap']).toBeUndefined();
+    rb.onclick();                                      // newAttempt → resetAttempt → baseline
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: -4 });      // attempt 2: 'down' alone
+    expect(S.missions['sc-retry::vcap']).toBeUndefined();   // attempt-1 'up' must not carry
+    dragTo(EXT, { x: 2, y: -4 }, { x: 2, y: 4 });      // 'up' within attempt 2 → complete
+    expect(S.missions['sc-retry::vcap']).toEqual({ 0: true });
+    expect(nextBtn().textContent).toBe('Finish 🏁');
   });
 
   it('legacy lessons (no scenes) still render the Learn step', () => {

@@ -269,6 +269,66 @@ describe('hover probe', () => {
   });
 });
 
+describe('remove()/refresh() on an actively-dragged handle (v1.3 item 3)', () => {
+  it('remove() mid-drag releases pointer capture, fires onRelease, and ends the drag', () => {
+    const s = fakeSurface();
+    const ix = makeInteraction(s);
+    const a = atomOf(0, 0);
+    let released = 0;
+    const h = ix.handle(a, { hitRadius: 1, onRelease: () => released++ });
+    s.el.dispatch('pointerdown', pd(0, 0, 7));       // grab with pointerId 7
+    expect(s.el.captured).toEqual([7]);
+    h.remove();                                       // e.g. refresh() after newAttempt
+    expect(s.el.released).toEqual([7]);               // capture released
+    expect(released).toBe(1);                         // drag ended cleanly
+    s.el.dispatch('pointermove', pd(3, 3, 7));        // stale moves write nothing
+    expect(a.get()).toEqual({ x: 0, y: 0 });
+  });
+
+  it('dispose() mid-drag also fires onRelease (not just capture release)', () => {
+    const s = fakeSurface();
+    const ix = makeInteraction(s);
+    const a = atomOf(0, 0);
+    let released = 0;
+    ix.handle(a, { hitRadius: 1, onRelease: () => released++ });
+    s.el.dispatch('pointerdown', pd(0, 0, 3));
+    ix.dispose();
+    expect(s.el.released).toEqual([3]);
+    expect(released).toBe(1);
+  });
+});
+
+describe('low-severity hardening (v1.3 follow-ups)', () => {
+  it('keyboard nudge is ignored during an active drag (no mid-drag write / _lock corruption)', () => {
+    const s = fakeSurface();
+    const ix = makeInteraction(s);
+    const a = atomOf(0, 0);
+    ix.handle(a, { hitRadius: 1 });
+    s.el.dispatch('pointerdown', pd(0, 0));           // grab
+    s.el.dispatch('pointermove', pd(2, 1));
+    expect(a.get()).toEqual({ x: 2, y: 1 });
+    s.el.dispatch('keydown', { key: 'ArrowUp', preventDefault() {} });  // mid-drag: ignored
+    expect(a.get()).toEqual({ x: 2, y: 1 });          // no nudge write during the drag
+    s.el.dispatch('pointerup', pd(2, 1));
+    s.el.dispatch('keydown', { key: 'ArrowUp', preventDefault() {} });  // post-drag: works
+    expect(a.get()).toEqual({ x: 2, y: 1.1 });
+  });
+
+  it('an atom.set that throws does not break the pointer rig', () => {
+    const s = fakeSurface();
+    const ix = makeInteraction(s);
+    let boom = true;
+    const v = { x: 0, y: 0 };
+    const a = { get: () => ({ ...v }), set: (p) => { if (boom) throw new Error('subscriber blew up'); v.x = p.x; v.y = p.y; } };
+    ix.handle(a, { hitRadius: 1 });
+    expect(() => s.el.dispatch('pointerdown', pd(0, 0))).not.toThrow();
+    boom = false;
+    s.el.dispatch('pointermove', pd(2, 1));           // rig still alive post-throw
+    expect(v).toEqual({ x: 2, y: 1 });
+    s.el.dispatch('pointerup', pd(2, 1));
+  });
+});
+
 describe('requestDraw + dispose', () => {
   it('requests a redraw on every write', () => {
     const s = fakeSurface();

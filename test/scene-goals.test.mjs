@@ -196,6 +196,65 @@ describe('visited() required validation (defense in depth)', () => {
   });
 });
 
+describe('resetAttempt() — attempt boundary (CONTRACT v1.3 §1)', () => {
+  it('cancels a hold armed in the previous attempt (quality repro: credits 300ms into attempt 2)', () => {
+    const clk = fakeTimers();
+    const g = makeGoals([goal('hold v>=1 for 500ms', (s) => s.v >= 1, { xp: 10, hold: 500 })],
+      { now: clk.now, schedule: clk.schedule, cancel: clk.cancel });
+    g.evaluate({ v: 0 });                 // baseline
+    g.markLearnerInput();
+    g.evaluate({ v: 1 });                 // true → hold armed at t=0
+    clk.advance(200);
+    g.resetAttempt();                     // attempt boundary (paired with newAttempt)
+    clk.advance(400);                     // attempt-1 timer would fire at t=500
+    expect(g.allDone()).toBe(false);      // must NOT credit into attempt 2
+    expect(clk.pendingCount()).toBe(0);   // timer actually cancelled, not just gated
+  });
+
+  it('clears visited keys + re-arms baseline; persisted credit stays earned', () => {
+    const store = memStore();
+    const g = makeGoals([
+      visited('try both', (s) => s.k, { keys: ['a', 'b'], xp: 5 }),
+      goal('flip it', (s) => s.done, { xp: 5 }),
+    ], { store });
+    g.evaluate({ k: null, done: false }); // baseline
+    g.markLearnerInput();
+    g.evaluate({ k: 'a', done: true });   // banks 'a'; credits goal 1 (persisted)
+    expect(g.isDone(1)).toBe(true);
+    g.resetAttempt();
+    g.markLearnerInput();                 // fresh learner input in attempt 2
+    g.evaluate({ k: 'b', done: false });  // FIRST post-reset evaluate = new baseline
+    g.evaluate({ k: 'b', done: false });  // learner-driven: banks 'b' — 1 key this attempt
+    expect(g.isDone(0)).toBe(false);      // attempt-1 'a' must NOT carry over
+    expect(g.isDone(1)).toBe(true);       // persisted credit untouched
+    g.evaluate({ k: 'a', done: false });  // both variants within attempt 2 → done
+    expect(g.isDone(0)).toBe(true);
+  });
+
+  it('resets the standalone learner-input gate (mirrors controller.newAttempt)', () => {
+    const g = makeGoals([goal('v>1', (s) => s.v > 1, { xp: 5 })]);
+    g.evaluate({ v: 0 });                 // baseline
+    g.markLearnerInput();
+    g.resetAttempt();
+    g.evaluate({ v: 2 });                 // post-reset baseline
+    g.evaluate({ v: 2 });                 // gate closed again → no credit
+    expect(g.allDone()).toBe(false);
+    g.markLearnerInput();
+    g.evaluate({ v: 2 });
+    expect(g.allDone()).toBe(true);
+  });
+
+  it('baseline evaluate never accumulates a visited key, even with input pre-marked (standalone)', () => {
+    const g = makeGoals([visited('two cells', (s) => s.cell, { required: 2, xp: 5 })]);
+    g.markLearnerInput();                 // input observed BEFORE the first evaluate
+    g.evaluate({ cell: 1 });              // baseline — must NOT bank cell 1
+    g.evaluate({ cell: 2 });              // banks 2 (1 distinct)
+    expect(g.allDone()).toBe(false);      // baseline key must not have counted
+    g.evaluate({ cell: 1 });              // banks 1 → 2 distinct → done
+    expect(g.allDone()).toBe(true);
+  });
+});
+
 describe('persistence + re-entry + dispose (rule 4)', () => {
   it('persists index→bool and hands the FULL descriptor (tag/focus intact) to onComplete', () => {
     const store = memStore();
