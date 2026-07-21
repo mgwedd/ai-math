@@ -12,7 +12,7 @@
      a headless null backend; a param write drives a re-render. */
 import { describe, it, expect } from 'vitest';
 import {
-  param, vec, view, snapshot, toAtoms,
+  param, vec, view, snapshot, toAtoms, makeRng,
   grid, vector, point, segment, label, polygon,
   diff, createFrameDriver, createSpace, createNullBackend,
   registerScene, validateScenes, SCENES, mountScene, goal, handle,
@@ -152,28 +152,66 @@ describe('registry', () => {
   });
 });
 
-describe('scene runtime (headless null backend)', () => {
-  it('mounts, renders a baseline, and re-renders on a param write', async () => {
-    const be = createNullBackend();
+describe('scene runtime (headless null backend, injected rAF)', () => {
+  it('renders baseline then re-renders on a param write via the real pipeline', async () => {
+    const be = createNullBackend(), f = fakeRaf();
     const spec = {
       id: 'rt.demo', space: 'plane2', params: { a: vec(2, 1) },
       entities: (p) => [grid({ key: 'g' }), vector(p.a, { key: 'v', handle: 'a' })],
     };
-    const f = fakeRaf();
-    // inject a controllable driver clock by swapping rAF via the scene's driver
-    const c = await mountScene(spec, null, { backend: be });
-    // baseline frame was requested in mountScene; drive it via the real driver's
-    // internal rAF (jsdom-less node has none), so pump manually:
-    c.driver.requestFrame();
-    // The driver uses globalThis rAF which is undefined in node; assert the
-    // pure surface instead: evaluate() is pure and diff/apply is wired.
-    const list = c.evaluate();
-    expect(list.map(e => e.kind)).toEqual(['grid', 'vector']);
-    be.apply(diff([], list));                     // simulate the render tick
+    const c = await mountScene(spec, null, { backend: be, raf: f.raf, caf: f.caf });
+    f.tick(16);                                   // baseline frame (mountScene requested it)
     expect(be._objects.get('v').v).toEqual({ x: 2, y: 1 });
-    c.params.a.set(vec(3, 3));
-    be.apply(diff(list, c.evaluate()));
+    c.params.a.set(vec(3, 3));                     // one-way flow schedules a frame
+    f.tick(16);
     expect(be._objects.get('v').v).toEqual({ x: 3, y: 3 });
     c.destroy();
+  });
+
+  it("label(at:'readout') is split to the readout sink, not the backend", async () => {
+    const be = createNullBackend(), f = fakeRaf(); const reads = [];
+    const spec = {
+      id: 'rt.readout', space: 'plane2', params: { k: 2 },
+      entities: (p) => [point(vec(0, 0), { key: 'p' }), label(() => 'k=' + p.k, { at: 'readout' })],
+    };
+    const c = await mountScene(spec, null, { backend: be, raf: f.raf, caf: f.caf, hooks: { onReadout: (xs) => reads.push(xs) } });
+    f.tick(16);
+    expect([...be._objects.keys()]).toEqual(['p']);       // canvas got only the point
+    expect(reads.at(-1)).toEqual(['k=2']);                // readout got the label text
+    c.destroy();
+  });
+
+  it("space:'free' yields a null space and never needs a Pixi backend", async () => {
+    const spec = { id: 'rt.free', space: 'free', params: {}, entities: () => [] };
+    const c = await mountScene(spec, null, {});          // no backend injected
+    expect(c.space).toBe(null);
+    c.destroy();
+  });
+});
+
+describe('v1.1 capstone reroll', () => {
+  it('vec() returns a PLAIN literal (no class prototype)', () => {
+    const v = vec(1, 2);
+    expect(Object.getPrototypeOf(v)).toBe(Object.prototype);
+  });
+  it('newAttempt(seed) is deterministic and flows through the atoms', async () => {
+    const be = createNullBackend(), f = fakeRaf();
+    const spec = {
+      id: 'rt.capstone', space: 'plane2', params: { a: vec(0, 0) },
+      randomize: (rng) => ({ a: vec(rng() * 4 - 2, rng() * 4 - 2) }),
+      entities: (p) => [vector(p.a, { key: 'v', handle: 'a' })],
+    };
+    const c1 = await mountScene(spec, null, { backend: be, raf: f.raf, caf: f.caf });
+    const s1 = c1.newAttempt(42);
+    const c2 = await mountScene(spec, null, { backend: createNullBackend(), raf: f.raf, caf: f.caf });
+    const s2 = c2.newAttempt(42);
+    expect(s1.a).toEqual(s2.a);                            // same seed -> same reroll
+    expect(c2.newAttempt(7).a).not.toEqual(s1.a);          // different seed -> different
+    expect(c1.params.a.get()).toEqual(s1.a);               // written through the atom
+    c1.destroy(); c2.destroy();
+  });
+  it('registerScene rejects a non-function randomize', () => {
+    expect(() => registerScene({ id: 'rt.badrng', space: 'plane2', entities: () => [], randomize: 5 }))
+      .toThrow(/randomize/);
   });
 });
