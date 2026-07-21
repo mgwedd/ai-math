@@ -94,7 +94,7 @@ describe('learner-input gate (rule 2, architect ruling)', () => {
   });
 
   it('visited() cannot complete pre-input even after seeing all variants', () => {
-    const g = makeGoals([visited('try both', (s) => s.variant, ['a', 'b'], { xp: 15 })]);
+    const g = makeGoals([visited('try both', (s) => s.variant, { keys: ['a', 'b'], xp: 15 })]);
     g.evaluate({ variant: 'a' });         // baseline (records 'a')
     g.evaluate({ variant: 'b' });         // auto-sweep records 'b' — but no input
     expect(g.allDone()).toBe(false);
@@ -164,17 +164,22 @@ describe('hold-time (rule 3)', () => {
   });
 });
 
-describe('visited() construction validation', () => {
-  it('throws on undefined / 0 / empty-array required', () => {
-    expect(() => visited('bad', () => 1, undefined)).toThrow();
-    expect(() => visited('bad', () => 1, 0)).toThrow();
-    expect(() => visited('bad', () => 1, [])).toThrow();
-    expect(() => visited('ok', () => 1, 1)).not.toThrow();
-    expect(() => visited('ok', () => 1, ['a'])).not.toThrow();
+describe('visited() required validation (defense in depth)', () => {
+  // CONTRACT v1.2 §7: the DESCRIPTOR is kit-core's (visited(text,keyOf,opts));
+  // `required` defaults to keys.length. required must be an integer >= 1
+  // (required=0/undefined would instant-complete). registerScene rejects it
+  // structurally; makeGoals is the runtime's own last-line guard (it also runs
+  // outside registerScene), so it throws too.
+  it('makeGoals throws on undefined / 0 / empty-keys required', () => {
+    expect(() => makeGoals([visited('bad', () => 1, {})])).toThrow();
+    expect(() => makeGoals([visited('bad', () => 1, { required: 0 })])).toThrow();
+    expect(() => makeGoals([visited('bad', () => 1, { keys: [] })])).toThrow();
+    expect(() => makeGoals([visited('ok', () => 1, { required: 1 })])).not.toThrow();
+    expect(() => makeGoals([visited('ok', () => 1, { keys: ['a'] })])).not.toThrow();
   });
 
   it('count form requires distinct keys', () => {
-    const g = makeGoals([visited('visit 3 cells', (s) => s.cell, 3, { xp: 5 })]);
+    const g = makeGoals([visited('visit 3 cells', (s) => s.cell, { required: 3, xp: 5 })]);
     g.evaluate({ cell: 1 });        // baseline
     g.markLearnerInput();
     g.evaluate({ cell: 2 });
