@@ -208,6 +208,17 @@ describe('capstone: weak-area tag migration + the official reroll seam', () => {
     cap.goals.forEach((g) => expect(g.predicate(s42)).toBe(false)); // fresh attempt is baseline-clean
     c.destroy();
   });
+  it('the learner-input gate (v1.2 §7) arms on input and RESETS on newAttempt', async () => {
+    const cap = capstoneFor(LESSON);
+    const noRaf = { raf: () => 0, caf: () => {} };
+    const c = await mountScene(cap, null, { backend: createNullBackend(), ...noRaf });
+    expect(c.hasLearnerInput()).toBe(false);              // mount: nothing can credit yet
+    c.markLearnerInput();                                 // input surfaces call this (interaction)
+    expect(c.hasLearnerInput()).toBe(true);
+    c.newAttempt(7);                                      // each capstone attempt needs FRESH input
+    expect(c.hasLearnerInput()).toBe(false);
+    c.destroy();
+  });
   it('has at least one hold>0 goal (drive-by passes are blocked)', () => {
     expect(capstoneFor(LESSON).goals.some((g) => g.hold > 0)).toBe(true);
   });

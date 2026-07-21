@@ -621,3 +621,54 @@ describe('type-aware quiz-shape validation (numeric + order)', () => {
     expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, wolfram: 42 }] })).toBe(true);
   });
 });
+
+describe('scene-lesson validation — capstone placement (Scene Kit CONTRACT §7.1)', () => {
+  // A lesson opts into scenes via `scenes:[...]` (ids resolved in the Scene Kit
+  // SCENES registry, or inline scene objects). validateCurriculum — not
+  // validateScenes — owns the ORDER rule: at most one capstone:true, and it
+  // must be the FINAL entry (a mid-sequence capstone strands later scenes).
+  const base = (scenes) => {
+    INTERACTIVES.__smoke_sc__ = noop;
+    registerLesson({ id: '__smoke_sc__', world: 'pre', title: 't', interactive: '__smoke_sc__',
+      scenes, quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    const errs = validateCurriculum().filter(e => e.includes('__smoke_sc__'));
+    drop('__smoke_sc__');
+    return errs;
+  };
+  // inline scene objects keep these tests self-contained (no SCENES setup)
+  const plain = (id) => ({ id, capstone: false });
+  const cap = (id) => ({ id, capstone: true });
+
+  it('accepts a scene list whose single capstone is the final entry', () => {
+    expect(base([plain('s.a'), plain('s.b'), cap('s.cap')])).toEqual([]);
+  });
+
+  it('accepts a scene list with no capstone (presence is the flagship rule, not §7.1)', () => {
+    expect(base([plain('s.a'), plain('s.b')])).toEqual([]);
+  });
+
+  it('flags a mid-sequence capstone, naming the lesson id', () => {
+    const errs = base([plain('s.a'), cap('s.cap'), plain('s.b')]);
+    expect(errs.join(' ')).toContain('capstone scene must be the LAST entry');
+    expect(errs.join(' ')).toContain('__smoke_sc__');
+  });
+
+  it('flags more than one capstone', () => {
+    expect(base([cap('s.c1'), plain('s.a'), cap('s.c2')]).join(' ')).toContain('2 capstone scenes');
+  });
+
+  it('resolves string entries against the SCENES registry and flags unknown ids', () => {
+    expect(base(['__no_such_scene__']).join(' ')).toContain('"__no_such_scene__" is not registered in SCENES');
+  });
+
+  it('resolves the real la-dot scene ids with the capstone last', async () => {
+    await import('../lib/curriculum/scenes/index.js');   // registers dot.* scenes
+    expect(base(['dot.anatomy', 'dot.alignment', 'dot.threegoals', 'dot.scaleinvariance',
+                 'dot.search', 'dot.attention', 'dot.capstone'])).toEqual([]);
+  });
+
+  it('rejects an empty or non-array scenes field', () => {
+    expect(base([]).join(' ')).toContain('non-empty array');
+    expect(base('dot.capstone').join(' ')).toContain('non-empty array');
+  });
+});
