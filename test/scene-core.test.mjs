@@ -13,9 +13,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   param, vec, view, snapshot, toAtoms, makeRng,
-  grid, vector, point, segment, label, polygon, angleArc,
+  grid, vector, point, label,
   diff, createFrameDriver, createSpace, createNullBackend,
-  registerScene, validateScenes, SCENES, mountScene, goal, visited, handle,
+  registerScene, validateScenes, SCENES, mountScene, visited,
 } from '../lib/scene/index.js';
 import { arcSweep } from '../lib/scene/renderer/draw.js';
 

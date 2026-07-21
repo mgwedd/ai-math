@@ -25,7 +25,14 @@
  *   node bench/bundle-guard.mjs --update                  # rewrite baseline from current build
  *   node bench/bundle-guard.mjs --first-load-kb 172       # also assert Next First Load JS
  */
-import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync } from 'node:fs';
+
+// Read a file, returning null if it doesn't exist — no exists/read gap for the
+// file to change under us (CodeQL js/file-system-race).
+function readIfExists(p) {
+  try { return readFileSync(p, 'utf8'); }
+  catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+}
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,11 +49,12 @@ const flagVal = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] 
 
 function fail(msg) { console.error('BUNDLE GUARD FAIL: ' + msg); process.exit(1); }
 
-if (!existsSync(MANIFEST)) {
+const manifestSrc = readIfExists(MANIFEST);
+if (manifestSrc == null) {
   fail(`no build manifest at ${MANIFEST}. Run \`npm run build\` first.`);
 }
 
-const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+const manifest = JSON.parse(manifestSrc);
 const chunks = manifest.pages?.[PAGE];
 if (!Array.isArray(chunks) || chunks.length === 0) {
   fail(`manifest has no chunk list for ${PAGE}. Did the route change?`);
@@ -58,12 +66,14 @@ let totalBytes = 0;
 const perChunk = [];
 for (const c of jsChunks) {
   const p = join(NEXT, c);
-  const bytes = existsSync(p) ? statSync(p).size : 0;
+  let bytes = 0;
+  try { bytes = statSync(p).size; } catch { /* chunk absent on disk */ }
   totalBytes += bytes;
   perChunk.push({ chunk: c, bytes, path: p });
 }
 
-const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, 'utf8')) : null;
+const baselineSrc = readIfExists(BASELINE);
+const baseline = baselineSrc == null ? null : JSON.parse(baselineSrc);
 // Distinctive substrings only — bare 'pixi'/'three' are ordinary-word-adjacent
 // and would false-positive on minified app code; the regex signature scan below
 // is the primary detector.
@@ -79,8 +89,8 @@ const RENDERER_SIGNATURES = [
 ];
 const leaks = [];
 for (const { chunk, path } of perChunk) {
-  if (!existsSync(path)) continue;
-  const src = readFileSync(path, 'utf8');
+  const src = readIfExists(path);
+  if (src == null) continue;
   const hitSig = RENDERER_SIGNATURES.filter((re) => re.test(src)).map(String);
   const hitName = forbidden.filter((n) => src.includes(n));
   if (hitSig.length || hitName.length) {
