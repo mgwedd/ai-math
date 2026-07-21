@@ -254,33 +254,73 @@ describe.skipIf(!HAVE_KIT || !motionPresent())('tween/sim determinism via inject
 });
 
 /* ==================== 3. GOAL BASELINE invariant ========================= */
-describe.skipIf(!HAVE_KIT || !interactionPresent())('goal baseline — first evaluation never credits (§7/§8)', () => {
+describe.skipIf(!interactionPresent())('goal baseline — first evaluation never credits (§7/§8)', () => {
+  // Bound to interaction's SHIPPED surface (ai/p0-interaction):
+  // lib/scene/goals.js exports goal()/episode()/visited() + makeGoals(defs, cfg)
+  // with cfg {store, onComplete, onAllDone, now, schedule, cancel} and an api
+  // {evaluate(state), reportEpisode(ep), allDone, isDone, dispose}.
+  const loadGoals = async () =>
+    (await importScene('goals.js')) || (await importScene('interaction.js'));
+
   it('a goal true at the default param state is NOT credited on the baseline eval', async () => {
-    const interaction = await importScene('interaction.js');
-    const goalsSeam = await importScene('seams/goals.js');
-    const paramsMod = await importScene('params.js');
-    if (!interaction || !goalsSeam || !paramsMod) return;
-    const { goal } = goalsSeam;
-    const { param, snapshot } = paramsMod;
-
-    // Build a goal that is TRUE at the default state (the auto-complete shape).
-    const g = goal('at origin', (s) => s.a === 0, { xp: 20 });
-    const P = { a: param(0) };
-
-    // The interaction runtime owns goal evaluation + baseline gating. Find its
-    // evaluator (name per interaction.md handoff; try the likely surface).
-    const makeEval = interaction.makeGoalRuntime || interaction.attachGoals || interaction.goalRuntime;
-    if (typeof makeEval !== 'function') return; // surface not yet named — informational
+    const mod = await loadGoals();
+    if (!mod?.makeGoals || !mod?.goal) return; // surface renamed — reflag in review
+    const { goal, makeGoals } = mod;
 
     let credited = 0;
-    const rt = makeEval({ goals: [g], params: P, snapshot, onGoal: () => { credited++; } });
+    const g = makeGoals(
+      [goal('at origin', (s) => s.a === 0, { xp: 20 })],
+      { onComplete: () => { credited++; } },
+    );
     // FIRST evaluation = baseline. Even though predicate is true, no credit.
-    rt.evaluate?.();
+    g.evaluate({ a: 0 });
     expect(credited, 'baseline must not credit').toBe(0);
-    // A learner-driven change to a still-qualifying state on a LATER eval credits.
-    P.a.set(1); rt.evaluate?.();     // moved away
-    P.a.set(0); rt.evaluate?.();     // returned to qualifying state
-    expect(credited, 'later qualifying eval credits').toBeGreaterThan(0);
+    expect(g.allDone()).toBe(false);
+    // Learner-driven later evaluations: away, then back to the qualifying state.
+    g.evaluate({ a: 1 });
+    expect(credited).toBe(0);
+    g.evaluate({ a: 0 });
+    expect(credited, 'later qualifying eval credits').toBe(1);
+    expect(g.allDone()).toBe(true);
+    g.dispose();
+  });
+
+  it('hold-time goals: baseline cannot arm the hold; a drive-by pass does not credit', async () => {
+    const mod = await loadGoals();
+    if (!mod?.makeGoals || !mod?.goal) return;
+    const { goal, makeGoals } = mod;
+
+    // Injected deterministic clock + captured timers (contract: hold via
+    // injected schedule/cancel so a stopped learner still completes at T+hold).
+    let t = 0;
+    const timers = [];
+    let credited = 0;
+    const g = makeGoals(
+      [goal('hold it', (s) => s.v > 0.5, { xp: 20, hold: 500 })],
+      {
+        now: () => t,
+        schedule: (fn, ms) => { const tk = { fn, at: t + ms, dead: false }; timers.push(tk); return tk; },
+        cancel: (tk) => { if (tk) tk.dead = true; },
+        onComplete: () => { credited++; },
+      },
+    );
+    const fire = () => { for (const tk of timers.splice(0)) if (!tk.dead) { t = Math.max(t, tk.at); tk.fn(); } };
+
+    g.evaluate({ v: 0.9 });          // BASELINE — predicate true, must not arm/credit
+    fire();                           // any timer armed by baseline would credit here
+    expect(credited, 'baseline must not credit even via a hold timer').toBe(0);
+
+    g.evaluate({ v: 0.9 });          // learner-driven: arms the 500ms hold
+    t += 100;
+    g.evaluate({ v: 0.1 });          // drive-by: leaves the qualifying state -> hold void
+    fire();
+    expect(credited, 'drive-by must not credit').toBe(0);
+
+    g.evaluate({ v: 0.9 });          // re-enter and stay
+    t += 600;
+    fire();                           // T+hold re-check fires with state still qualifying
+    expect(credited, 'sustained hold credits').toBe(1);
+    g.dispose();
   });
 });
 
