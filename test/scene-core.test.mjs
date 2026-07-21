@@ -15,7 +15,7 @@ import {
   param, vec, view, snapshot, toAtoms, makeRng,
   grid, vector, point, segment, label, polygon,
   diff, createFrameDriver, createSpace, createNullBackend,
-  registerScene, validateScenes, SCENES, mountScene, goal, handle,
+  registerScene, validateScenes, SCENES, mountScene, goal, visited, handle,
 } from '../lib/scene/index.js';
 
 /* ---- a controllable rAF so driver tests are deterministic (no real clock) ---- */
@@ -213,5 +213,42 @@ describe('v1.1 capstone reroll', () => {
   it('registerScene rejects a non-function randomize', () => {
     expect(() => registerScene({ id: 'rt.badrng', space: 'plane2', entities: () => [], randomize: 5 }))
       .toThrow(/randomize/);
+  });
+});
+
+describe('v1.2 visited() goal type', () => {
+  const base = { id: 'v12.v', space: 'plane2', params: {}, entities: () => [] };
+  it('builds the frozen descriptor; required defaults to keys.length', () => {
+    const g = visited('Try both modes', s => s.mode, { keys: ['a', 'b'], xp: 20, tag: 'modes' });
+    expect(g).toMatchObject({ type: 'visited', required: 2, keys: ['a', 'b'], xp: 20, tag: 'modes' });
+  });
+  it('REJECTS required=0/undefined (instant-complete bug) at registration', () => {
+    // no keys, no required -> required stays undefined -> must throw
+    expect(() => registerScene({ ...base, goals: [visited('x', s => s.m, { xp: 10 })] }))
+      .toThrow(/required/);
+    expect(() => registerScene({ ...base, goals: [visited('x', s => s.m, { xp: 10, required: 0 })] }))
+      .toThrow(/required/);
+    expect(() => registerScene({ ...base, goals: [visited('x', s => s.m, { xp: 10, required: 3, keys: ['a'] })] }))
+      .toThrow(/exceeds/);
+  });
+  it('accepts a valid visited goal (required explicit or via keys)', () => {
+    registerScene({ ...base, id: 'v12.ok', goals: [visited('x', s => s.m, { xp: 10, required: 2 })] });
+    registerScene({ ...base, id: 'v12.ok2', goals: [visited('x', s => s.m, { xp: 10, keys: ['a', 'b', 'c'] })] });
+  });
+});
+
+describe('v1.2 learner-input gate seam', () => {
+  it('hasLearnerInput false at mount, true after mark, RESET by newAttempt', async () => {
+    const c = await mountScene(
+      { id: 'v12.gate', space: 'plane2', params: { a: vec(1, 0) },
+        randomize: (rng) => ({ a: vec(rng(), rng()) }),
+        entities: (p) => [vector(p.a, { key: 'v' })] },
+      null, { backend: createNullBackend() });
+    expect(c.hasLearnerInput()).toBe(false);          // mount tween could run here — no credit possible
+    c.markLearnerInput();
+    expect(c.hasLearnerInput()).toBe(true);
+    c.newAttempt(1);
+    expect(c.hasLearnerInput()).toBe(false);          // fresh capstone attempt requires fresh input
+    c.destroy();
   });
 });
