@@ -1,0 +1,19 @@
+{
+  "_comment": "Auth-gate bundle baseline, measured on ai/p0-quality @ base origin/ai/scene-kit-p0 (plan doc only, NO Scene Kit / pixi / three yet). This is the number the Scene Kit must not regress: pixi.js must ride the post-auth import() split in components/Minima.jsx (curriculum+engine are dynamically imported only when session is truthy), so it must NOT appear in the initial chunk set for route '/'. Regenerate with: npm run build && node bench/bundle-guard.mjs --update.",
+  "measuredAt": "2026-07-20",
+  "baseBranch": "origin/ai/scene-kit-p0",
+  "route": "/page",
+  "firstLoadJsKB": 172,
+  "initialChunkBytesOnDisk": 611624,
+  "initialChunkCount": 7,
+  "forbiddenInInitialChunks": [
+    "pixi.js",
+    "@pixi",
+    "three.module"
+  ],
+  "tolerance": {
+    "_comment": "Allow small drift from unrelated shell changes; a real pixi leak (>100KB gz) blows past this. firstLoadJs is the authoritative Next-reported metric; disk bytes are a coarser secondary guard.",
+    "firstLoadJsKBMax": 185,
+    "diskBytesMaxGrowthPct": 8
+  }
+}
