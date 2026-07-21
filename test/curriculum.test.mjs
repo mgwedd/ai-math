@@ -621,3 +621,111 @@ describe('type-aware quiz-shape validation (numeric + order)', () => {
     expect(withSpy({ quiz: [{ type: 'numeric', q: '?', answer: 12, tol: 0.001, wolfram: 42 }] })).toBe(true);
   });
 });
+
+describe('scene-lesson validation — capstone placement (Scene Kit CONTRACT §7.1)', () => {
+  // A lesson opts into scenes via `scenes:[...]` (ids resolved in the Scene Kit
+  // SCENES registry, or inline scene objects). validateCurriculum — not
+  // validateScenes — owns the ORDER rule: at most one capstone:true, and it
+  // must be the FINAL entry (a mid-sequence capstone strands later scenes).
+  const base = (scenes) => {
+    INTERACTIVES.__smoke_sc__ = noop;
+    registerLesson({ id: '__smoke_sc__', world: 'pre', title: 't', interactive: '__smoke_sc__',
+      scenes, quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    const errs = validateCurriculum().filter(e => e.includes('__smoke_sc__'));
+    drop('__smoke_sc__');
+    return errs;
+  };
+  // inline scene objects keep these tests self-contained (no SCENES setup).
+  // A valid capstone carries >= 1 goal (CONTRACT v1.3 §4 — an empty-goals
+  // capstone is vacuously complete); emptyCap below is the invalid shape.
+  const plain = (id) => ({ id, capstone: false });
+  const cap = (id) => ({ id, capstone: true, goals: [{ type: 'goal', text: 't', predicate: () => false, xp: 1 }] });
+  const emptyCap = (id) => ({ id, capstone: true, goals: [] });
+
+  it('accepts a scene list whose single capstone is the final entry', () => {
+    expect(base([plain('s.a'), plain('s.b'), cap('s.cap')])).toEqual([]);
+  });
+
+  it('accepts a scene list with no capstone (presence is the flagship rule, not §7.1)', () => {
+    expect(base([plain('s.a'), plain('s.b')])).toEqual([]);
+  });
+
+  it('flags a mid-sequence capstone, naming the lesson id', () => {
+    const errs = base([plain('s.a'), cap('s.cap'), plain('s.b')]);
+    expect(errs.join(' ')).toContain('capstone scene must be the LAST entry');
+    expect(errs.join(' ')).toContain('__smoke_sc__');
+  });
+
+  it('flags more than one capstone', () => {
+    expect(base([cap('s.c1'), plain('s.a'), cap('s.c2')]).join(' ')).toContain('2 capstone scenes');
+  });
+
+  it('rejects a capstone scene that declares no goals (CONTRACT v1.3 §4)', () => {
+    const errs = base([plain('s.a'), emptyCap('s.cap')]);
+    expect(errs.join(' ')).toContain('declares no goals');
+    expect(errs.join(' ')).toContain('"s.cap"');
+    // a goals-less capstone declared as `goals` missing entirely is equally invalid
+    expect(base([plain('s.a'), { id: 's.cap2', capstone: true }]).join(' ')).toContain('declares no goals');
+    // non-capstone scenes may have zero goals (decorative) — no error
+    expect(base([{ id: 's.deco', capstone: false, goals: [] }, cap('s.cap')])).toEqual([]);
+  });
+
+  it('resolves string entries against the SCENES registry and flags unknown ids', () => {
+    expect(base(['__no_such_scene__']).join(' ')).toContain('"__no_such_scene__" is not registered in SCENES');
+  });
+
+  it('resolves the real la-dot scene ids with the capstone last', async () => {
+    await import('../lib/curriculum/scenes/index.js');   // registers dot.* scenes
+    expect(base(['dot.anatomy', 'dot.alignment', 'dot.threegoals', 'dot.scaleinvariance',
+                 'dot.search', 'dot.attention', 'dot.capstone'])).toEqual([]);
+  });
+
+  it('rejects an empty or non-array scenes field', () => {
+    expect(base([]).join(' ')).toContain('non-empty array');
+    expect(base('dot.capstone').join(' ')).toContain('non-empty array');
+  });
+
+  // CONTRACT v1.3 §5: a scenes-only lesson (no `interactive`, no `labs`)
+  // passes shape validation — `scenes:[...]` with >= 1 scene satisfies the
+  // interactive-content requirement. Quiz rules are unchanged (still required).
+  it('accepts a scenes-only lesson: `scenes` satisfies the interactive-content requirement', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(noop);
+    registerLesson({ id: '__smoke_sconly__', world: 'pre', title: 't',
+      scenes: [plain('s.a'), cap('s.cap')], quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    expect(spy).not.toHaveBeenCalled();                       // shape-clean at registration
+    spy.mockRestore();
+    const errs = validateCurriculum().filter(e => e.includes('__smoke_sconly__'));
+    drop('__smoke_sconly__');
+    expect(errs).toEqual([]);                                 // cross-checks clean too
+  });
+
+  it('still rejects a lesson with NO interactive content at all (no labs/interactive/scenes)', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(noop);
+    registerLesson({ id: '__smoke_nocontent__', world: 'pre', title: 't',
+      quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls.flat().join(' ')).toContain('scenes');
+    spy.mockRestore();
+    drop('__smoke_nocontent__');
+  });
+
+  // Review-confirmed defect: the PRODUCTION la-dot lesson (registered by
+  // lib/curriculum/index.js, not a synthetic __smoke_sc__ lesson) used to
+  // carry only `labs`/`interactive`, never `scenes:[...]`, so this whole
+  // §7.1 rule never actually ran against shipped content — the tests above
+  // only proved the RULE works on synthetic inputs. Assert directly on the
+  // real, already-loaded `la-dot` lesson from the top-level beforeAll import.
+  it('the REAL la-dot lesson (not a synthetic smoke lesson) wires `scenes` and passes §7.1', () => {
+    const lesson = LESSONS.find((l) => l.id === 'la-dot');
+    expect(lesson, 'la-dot must be registered').toBeTruthy();
+    expect(lesson.scenes).toEqual([
+      'dot.anatomy', 'dot.alignment', 'dot.threegoals', 'dot.scaleinvariance',
+      'dot.search', 'dot.attention', 'dot.capstone',
+    ]);
+    expect(lesson.scenes[lesson.scenes.length - 1]).toBe('dot.capstone'); // capstone LAST
+    // the old lab is untouched — additive, not a replacement
+    expect(lesson.labs.some((l) => l.interactive === 'dot')).toBe(true);
+    const errs = validateCurriculum().filter((e) => e.includes('"la-dot"'));
+    expect(errs).toEqual([]);
+  });
+});
