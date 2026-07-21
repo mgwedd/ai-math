@@ -93,13 +93,18 @@ describe('learner-input gate (rule 2, architect ruling)', () => {
     expect(g.allDone()).toBe(true);
   });
 
-  it('visited() cannot complete pre-input even after seeing all variants', () => {
+  it('visited() ignores pre-input sweeps; only learner-driven variants count (§7)', () => {
+    // CONTRACT §7: while the gate is closed, "no visited() key is accumulated".
+    // A pre-input sweep through both variants records NOTHING — the learner
+    // must genuinely drive through each variant AFTER acting.
     const g = makeGoals([visited('try both', (s) => s.variant, { keys: ['a', 'b'], xp: 15 })]);
-    g.evaluate({ variant: 'a' });         // baseline (records 'a')
-    g.evaluate({ variant: 'b' });         // auto-sweep records 'b' — but no input
+    g.evaluate({ variant: 'a' });         // baseline — pre-input, NOT accumulated
+    g.evaluate({ variant: 'b' });         // auto-sweep — pre-input, NOT accumulated
     expect(g.allDone()).toBe(false);
     g.markLearnerInput();
-    g.evaluate({ variant: 'a' });         // post-input evaluate → both seen → done
+    g.evaluate({ variant: 'a' });         // post-input: records 'a' (1 of 2)
+    expect(g.allDone()).toBe(false);      // one learner-driven variant is not enough
+    g.evaluate({ variant: 'b' });         // post-input: records 'b' → both → done
     expect(g.allDone()).toBe(true);
   });
 
@@ -180,12 +185,13 @@ describe('visited() required validation (defense in depth)', () => {
 
   it('count form requires distinct keys', () => {
     const g = makeGoals([visited('visit 3 cells', (s) => s.cell, { required: 3, xp: 5 })]);
-    g.evaluate({ cell: 1 });        // baseline
+    g.evaluate({ cell: 1 });        // baseline — pre-input, NOT accumulated (§7)
     g.markLearnerInput();
+    g.evaluate({ cell: 1 });        // post-input: records 1
     g.evaluate({ cell: 2 });
     g.evaluate({ cell: 2 });        // dup ignored
     expect(g.allDone()).toBe(false);
-    g.evaluate({ cell: 3 });        // 3 distinct → done
+    g.evaluate({ cell: 3 });        // 3 distinct learner-driven → done
     expect(g.allDone()).toBe(true);
   });
 });
