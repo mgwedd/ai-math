@@ -434,3 +434,184 @@ describe('detectReducedMotion adapter', () => {
     expect(detectReducedMotion()).toBe(false);
   });
 });
+
+/* ============================================================ regressions
+ * Confirmed P0 defects (reproduced by the quality principal), each pinned by a
+ * directed test. See coordination/motion.md "Decisions". */
+
+describe('regression: seek() on a LIVE spring lands on the target (HIGH #1)', () => {
+  it('a mid-flight spring seeked to its end snaps to target, not the stale mid value', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const p = atom(0);
+    const h = clock.tween(p, 100, { spring: true });
+    for (let i = 0; i < 5; i++) d.step(1 / 60); // mid-flight: partway to 100
+    const mid = p.get();
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(100); // genuinely mid-flight, not settled
+    h.seek(999); // jump past the end
+    // BUG WAS: _evaluate re-read the stale springState and clobbered the snap
+    // back to ~39. Must land exactly on the target.
+    expect(p.get()).toBeCloseTo(100, 6);
+  });
+
+  it('a mid-flight spring stays on target across repeated seeks', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const p = atom(0);
+    const h = clock.tween(p, 50, { spring: true });
+    for (let i = 0; i < 4; i++) d.step(1 / 60);
+    h.seek(999); expect(p.get()).toBeCloseTo(50, 6);
+    h.seek(999); expect(p.get()).toBeCloseTo(50, 6); // idempotent
+  });
+});
+
+describe('regression: onComplete fires at most once per traversal (HIGH #2)', () => {
+  it('repeated past-end seeks do not re-fire onComplete; rewind before end re-arms it', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const p = atom(0);
+    let fires = 0;
+    const h = clock.timeline({ param: p, to: 100, dur: 100, ease: 'linear', onComplete: () => { fires += 1; } });
+    h.seek(200); expect(fires).toBe(1);  // crossed the end once
+    h.seek(150); expect(fires).toBe(1);  // stays past end -> NO re-fire (was 2)
+    h.seek(300); expect(fires).toBe(1);  // still past end -> NO re-fire (was 3)
+    h.seek(50);  expect(fires).toBe(1);  // rewound before the end -> re-arm, no fire yet
+    h.seek(120); expect(fires).toBe(2);  // crossed the end again -> exactly one more
+  });
+
+  it('per-leg onComplete in a sequence fires once per leg crossed, re-arms on rewind', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const p = atom(0);
+    let leg1 = 0; let leg2 = 0;
+    const h = clock.timeline({ sequence: [
+      { param: p, to: 10, dur: 100, ease: 'linear', onComplete: () => { leg1 += 1; } },
+      { param: p, to: 20, dur: 100, ease: 'linear', onComplete: () => { leg2 += 1; } },
+    ] });
+    h.seek(250); expect(leg1).toBe(1); expect(leg2).toBe(1); // both legs crossed
+    h.seek(260); expect(leg1).toBe(1); expect(leg2).toBe(1); // still past both -> no re-fire
+    h.seek(150); expect(leg1).toBe(1); expect(leg2).toBe(1); // before leg2 end -> re-arm leg2 only
+    h.seek(250); expect(leg1).toBe(1); expect(leg2).toBe(2); // re-cross leg2 -> one more
+  });
+});
+
+describe('regression: spring settled flag resets each loop cycle (MEDIUM #3)', () => {
+  it('a looping timeline re-runs its spring to full length every cycle (no cycle-2 truncation)', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    const p = atom(0);
+    // Short eased leg + a slower spring: the timeline must wait for the spring
+    // to settle every cycle. If `settled` never resets, cycle 2+ loops early
+    // (at the eased-leg length) and the spring is truncated.
+    const h = clock.timeline({ parallel: [
+      { param: atom(0), to: 1, dur: 30, ease: 'linear' },
+      { param: p, to: 100, spring: { stiffness: 100, damping: 30, mass: 1 } },
+    ] }, { loop: true });
+
+    const cycleLengths = [];
+    let frames = 0;
+    let last = h.playhead;
+    for (let i = 0; i < 1500; i++) {
+      d.step(1 / 60);
+      frames += 1;
+      if (h.playhead < last) { cycleLengths.push(frames); frames = 0; }
+      last = h.playhead;
+    }
+    expect(cycleLengths.length).toBeGreaterThanOrEqual(3);
+    // cycle 2 must be about as long as cycle 1 (it waits for the spring), not
+    // collapsed to the ~2-frame eased-leg length.
+    expect(cycleLengths[1]).toBeGreaterThan(cycleLengths[0] * 0.7);
+    expect(cycleLengths[2]).toBeGreaterThan(cycleLengths[0] * 0.7);
+  });
+});
+
+describe('regression: per-callback error isolation keeps the loop alive (MEDIUM #4)', () => {
+  it('a throwing onUpdate does not starve a sibling tween and is reported, not swallowed', () => {
+    const d = manualDriver();
+    const errors = [];
+    const clock = createClock({ driver: d, onError: (e) => errors.push(e) });
+    const good = atom(0);
+    const bad = atom(0);
+    clock.tween(bad, 1, { dur: 100, ease: 'linear', onUpdate: () => { throw new Error('boom'); } });
+    clock.tween(good, 10, { dur: 100, ease: 'linear' });
+    d.step(0.05);
+    expect(good.get()).toBeCloseTo(5, 6); // sibling advanced despite the throw
+    expect(errors.length).toBeGreaterThan(0); // reported through onError
+    d.step(0.05);
+    expect(good.get()).toBeCloseTo(10, 6); // sibling completes; loop never pinned
+    expect(d.running).toBe(false);
+  });
+
+  it('a throwing sim step does not starve a sibling tween', () => {
+    const d = manualDriver();
+    const errors = [];
+    const clock = createClock({ driver: d, onError: (e) => errors.push(e) });
+    const good = atom(0);
+    clock.sim(() => { throw new Error('sim boom'); }, { dt: 1 / 60 });
+    clock.tween(good, 10, { dur: 100, ease: 'linear' });
+    d.step(0.05);
+    expect(good.get()).toBeCloseTo(5, 6);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('regression: post-dispose calls are inert (MEDIUM #5)', () => {
+  it('tween/sim on a disposed clock do not reanimate the driver', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    clock.dispose();
+    expect(clock._disposed()).toBe(true);
+    const p = atom(0);
+    const h = clock.tween(p, 100, { dur: 100, ease: 'linear' });
+    expect(d.running).toBe(false); // no source attached
+    d.step(0.05);
+    expect(p.get()).toBe(0); // nothing animated
+    // the inert handle is safe to chain
+    expect(() => { h.pause(); h.play(); h.seek(10); h.scrub(0.5); h.cancel(); h.then(() => {}); }).not.toThrow();
+    const s = clock.sim(() => {}, { dt: 1 / 60 });
+    expect(d.running).toBe(false);
+    expect(s.active()).toBe(false);
+  });
+
+  it('dispose() is idempotent', () => {
+    const d = manualDriver();
+    const clock = createClock({ driver: d });
+    clock.tween(atom(0), 1, { dur: 100 });
+    expect(() => { clock.dispose(); clock.dispose(); }).not.toThrow();
+    expect(d.running).toBe(false);
+  });
+});
+
+describe('regression: degenerate input validation throws (MEDIUM #6)', () => {
+  it('rejects a zero / negative / non-finite spring mass', () => {
+    const clock = createClock({ driver: manualDriver() });
+    expect(() => clock.tween(atom(0), 1, { spring: { mass: 0 } })).toThrow(/mass/);
+    expect(() => clock.tween(atom(0), 1, { spring: { mass: -1 } })).toThrow(/mass/);
+    expect(() => clock.tween(atom(0), 1, { spring: { mass: NaN } })).toThrow(/mass/);
+  });
+  it('rejects non-positive stiffness and negative damping', () => {
+    const clock = createClock({ driver: manualDriver() });
+    expect(() => clock.tween(atom(0), 1, { spring: { stiffness: 0 } })).toThrow(/stiffness/);
+    expect(() => clock.tween(atom(0), 1, { spring: { damping: -5 } })).toThrow(/damping/);
+  });
+  it('rejects a negative or non-finite tween duration / delay', () => {
+    const clock = createClock({ driver: manualDriver() });
+    expect(() => clock.tween(atom(0), 1, { dur: -100 })).toThrow(/dur/);
+    expect(() => clock.tween(atom(0), 1, { dur: NaN })).toThrow(/dur/);
+    expect(() => clock.tween(atom(0), 1, { dur: 100, delay: -50 })).toThrow(/delay/);
+  });
+  it('rejects hz <= 0 (and dt <= 0) for a sim', () => {
+    const clock = createClock({ driver: manualDriver() });
+    expect(() => clock.sim(() => {}, { hz: 0 })).toThrow();
+    expect(() => clock.sim(() => {}, { hz: -60 })).toThrow();
+    expect(() => clock.sim(() => {}, { dt: 0 })).toThrow();
+  });
+  it('rejects a non-finite seek (NaN / Infinity)', () => {
+    const clock = createClock({ driver: manualDriver() });
+    const h = clock.timeline({ param: atom(0), to: 1, dur: 100, ease: 'linear' });
+    expect(() => h.seek(NaN)).toThrow();
+    expect(() => h.seek(Infinity)).toThrow();
+    expect(() => h.scrub(NaN)).toThrow();
+  });
+});
