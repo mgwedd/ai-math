@@ -20,7 +20,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
 let SCENES, validateScenes, toAtoms, view, snapshot;
-let makeRng, mountScene, createNullBackend;
+let makeRng, mountScene, createNullBackend, registerScene;
 let scenesForLesson, capstoneFor, validateSceneLessons;
 
 const LESSON = 'la-dot';
@@ -40,7 +40,7 @@ const angleOf = (v) => Math.atan2(v.y, v.x);
 beforeAll(async () => {
   const kit = await import('../lib/scene/index.js');
   ({ SCENES, validateScenes, toAtoms, view, snapshot,
-     makeRng, mountScene, createNullBackend } = kit);
+     makeRng, mountScene, createNullBackend, registerScene } = kit);
   const res = await import('../lib/curriculum/scenes/index.js');   // registers la-dot scenes
   ({ scenesForLesson, capstoneFor, validateSceneLessons } = res);
 });
@@ -58,6 +58,21 @@ describe('registration + validation', () => {
   it('passes the flagship lesson rule (exactly one capstone)', () => {
     expect(validateSceneLessons()).toEqual([]);
     expect(capstoneFor(LESSON).id).toBe('dot.capstone');
+  });
+  it('validateSceneLessons rejects an empty-goals capstone (CONTRACT v1.3 §4 mirror)', () => {
+    // register a synthetic scene under a synthetic lesson; the kit accepts a
+    // goals-less scene (goals is optional at scene level) — the >= 1-goal rule
+    // for CAPSTONES is a lesson-level property owned by this validator.
+    registerScene({ id: '__test.emptycap', lesson: '__test-lesson__', capstone: true,
+      space: 'plane2', params: {}, entities: () => [], goals: [] });
+    try {
+      const problems = validateSceneLessons().filter((p) => p.includes('__test-lesson__'));
+      expect(problems.join(' ')).toContain('declares no goals');
+      expect(problems.join(' ')).toContain('__test.emptycap');
+    } finally {
+      SCENES.splice(SCENES.findIndex((s) => s.id === '__test.emptycap'), 1);
+    }
+    expect(validateSceneLessons()).toEqual([]);   // registry clean again
   });
   it('every scene is plane2, has a caption ≤ 3 sentences, and 2–5 goals', () => {
     for (const s of scenesForLesson(LESSON)) {

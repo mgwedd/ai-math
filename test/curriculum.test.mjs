@@ -635,9 +635,12 @@ describe('scene-lesson validation — capstone placement (Scene Kit CONTRACT §7
     drop('__smoke_sc__');
     return errs;
   };
-  // inline scene objects keep these tests self-contained (no SCENES setup)
+  // inline scene objects keep these tests self-contained (no SCENES setup).
+  // A valid capstone carries >= 1 goal (CONTRACT v1.3 §4 — an empty-goals
+  // capstone is vacuously complete); emptyCap below is the invalid shape.
   const plain = (id) => ({ id, capstone: false });
-  const cap = (id) => ({ id, capstone: true });
+  const cap = (id) => ({ id, capstone: true, goals: [{ type: 'goal', text: 't', predicate: () => false, xp: 1 }] });
+  const emptyCap = (id) => ({ id, capstone: true, goals: [] });
 
   it('accepts a scene list whose single capstone is the final entry', () => {
     expect(base([plain('s.a'), plain('s.b'), cap('s.cap')])).toEqual([]);
@@ -657,6 +660,16 @@ describe('scene-lesson validation — capstone placement (Scene Kit CONTRACT §7
     expect(base([cap('s.c1'), plain('s.a'), cap('s.c2')]).join(' ')).toContain('2 capstone scenes');
   });
 
+  it('rejects a capstone scene that declares no goals (CONTRACT v1.3 §4)', () => {
+    const errs = base([plain('s.a'), emptyCap('s.cap')]);
+    expect(errs.join(' ')).toContain('declares no goals');
+    expect(errs.join(' ')).toContain('"s.cap"');
+    // a goals-less capstone declared as `goals` missing entirely is equally invalid
+    expect(base([plain('s.a'), { id: 's.cap2', capstone: true }]).join(' ')).toContain('declares no goals');
+    // non-capstone scenes may have zero goals (decorative) — no error
+    expect(base([{ id: 's.deco', capstone: false, goals: [] }, cap('s.cap')])).toEqual([]);
+  });
+
   it('resolves string entries against the SCENES registry and flags unknown ids', () => {
     expect(base(['__no_such_scene__']).join(' ')).toContain('"__no_such_scene__" is not registered in SCENES');
   });
@@ -670,6 +683,30 @@ describe('scene-lesson validation — capstone placement (Scene Kit CONTRACT §7
   it('rejects an empty or non-array scenes field', () => {
     expect(base([]).join(' ')).toContain('non-empty array');
     expect(base('dot.capstone').join(' ')).toContain('non-empty array');
+  });
+
+  // CONTRACT v1.3 §5: a scenes-only lesson (no `interactive`, no `labs`)
+  // passes shape validation — `scenes:[...]` with >= 1 scene satisfies the
+  // interactive-content requirement. Quiz rules are unchanged (still required).
+  it('accepts a scenes-only lesson: `scenes` satisfies the interactive-content requirement', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(noop);
+    registerLesson({ id: '__smoke_sconly__', world: 'pre', title: 't',
+      scenes: [plain('s.a'), cap('s.cap')], quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    expect(spy).not.toHaveBeenCalled();                       // shape-clean at registration
+    spy.mockRestore();
+    const errs = validateCurriculum().filter(e => e.includes('__smoke_sconly__'));
+    drop('__smoke_sconly__');
+    expect(errs).toEqual([]);                                 // cross-checks clean too
+  });
+
+  it('still rejects a lesson with NO interactive content at all (no labs/interactive/scenes)', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(noop);
+    registerLesson({ id: '__smoke_nocontent__', world: 'pre', title: 't',
+      quiz: [{ q: '?', opts: ['a', 'b'], a: 0 }] });
+    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls.flat().join(' ')).toContain('scenes');
+    spy.mockRestore();
+    drop('__smoke_nocontent__');
   });
 
   // Review-confirmed defect: the PRODUCTION la-dot lesson (registered by
