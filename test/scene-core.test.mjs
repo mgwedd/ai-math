@@ -15,7 +15,7 @@ import {
   param, vec, view, snapshot, toAtoms, makeRng,
   grid, vector, point, label,
   diff, createFrameDriver, createSpace, createNullBackend,
-  registerScene, validateScenes, SCENES, mountScene, visited,
+  registerScene, validateScenes, SCENES, mountScene, visited, slider,
 } from '../lib/scene/index.js';
 import { arcSweep } from '../lib/scene/renderer/draw.js';
 
@@ -442,5 +442,272 @@ describe('Pixi backend context-loss listener lifecycle (defects 1-3)', () => {
     expect(b2._app).not.toBe(app1);                       // getApp() built a FRESH app, not the cached one
     expect(app1.destroyed).toBe(true);
     b2.unmount(); destroyPixiSingleton();
+  });
+});
+
+/* ============================ v1.4 SLIDER CONTROL SEAM ============================ */
+
+describe('v1.4 slider() control descriptor + validation', () => {
+  it('builds the frozen descriptor shape', () => {
+    const fmt = (v) => v.toFixed(2);
+    const s = slider('k', { min: 0, max: 1, step: 0.1, label: 'weight k', format: fmt });
+    expect(s).toEqual({ kind: 'slider', param: 'k', min: 0, max: 1, step: 0.1, label: 'weight k', format: fmt });
+  });
+  it('min/max are the only required opts; step/label/format optional', () => {
+    const s = slider('t', { min: -3, max: 3 });
+    expect(s).toMatchObject({ kind: 'slider', param: 't', min: -3, max: 3 });
+    expect(s.step).toBeUndefined();
+  });
+
+  const base = { id: 's14.base', space: 'plane2', params: { k: 0.5 }, entities: () => [] };
+  it('registerScene REJECTS malformed controls loudly (with the scene id)', () => {
+    expect(() => registerScene({ ...base, id: 's14.notarr', controls: {} })).toThrow(/controls.*array/);
+    expect(() => registerScene({ ...base, id: 's14.badkind', controls: [{ kind: 'dial', param: 'k' }] })).toThrow(/unknown control kind/);
+    expect(() => registerScene({ ...base, id: 's14.noparam', controls: [slider(5, { min: 0, max: 1 })] })).toThrow(/missing `param`/);
+    expect(() => registerScene({ ...base, id: 's14.nomin', controls: [slider('k', { max: 1 })] })).toThrow(/`min` must be a finite number/);
+    expect(() => registerScene({ ...base, id: 's14.badrange', controls: [slider('k', { min: 2, max: 1 })] })).toThrow(/`min` must be < `max`/);
+    expect(() => registerScene({ ...base, id: 's14.badstep', controls: [slider('k', { min: 0, max: 1, step: -1 })] })).toThrow(/`step` must be a positive number/);
+  });
+  it('registerScene ACCEPTS a well-formed slider', () => {
+    expect(() => registerScene({ ...base, id: 's14.ok', controls: [slider('k', { min: 0, max: 1, step: 0.05 })] })).not.toThrow();
+  });
+  it('validateScenes rejects a slider bound to a MISSING or NON-NUMERIC param', () => {
+    registerScene({ ...base, id: 's14.missing', params: { k: 0.5 }, controls: [slider('nope', { min: 0, max: 1 })] });
+    registerScene({ ...base, id: 's14.vecparam', params: { v: vec(1, 0) }, controls: [slider('v', { min: 0, max: 1 })] });
+    const problems = validateScenes();
+    expect(problems.some(m => m.includes('s14.missing') && /is not a declared param/.test(m))).toBe(true);
+    expect(problems.some(m => m.includes('s14.vecparam') && /must be a numeric/.test(m))).toBe(true);
+  });
+  it('F2: validateScenes rejects an initial param value OUTSIDE [min,max]', () => {
+    registerScene({ ...base, id: 's14.oor', params: { k: 5 }, controls: [slider('k', { min: 0, max: 1 })] });
+    expect(validateScenes().some(m => m.includes('s14.oor') && /outside \[min,max\]/.test(m))).toBe(true);
+  });
+  it('LOW: validateScenes flags TWO sliders bound to the same param', () => {
+    registerScene({ ...base, id: 's14.dup', params: { k: 0.5 }, controls: [slider('k', { min: 0, max: 1 }), slider('k', { min: 0, max: 2 })] });
+    expect(validateScenes().some(m => m.includes('s14.dup') && /duplicate slider on param/.test(m))).toBe(true);
+  });
+});
+
+describe('v1.4 F4: inline (unregistered) scene specs are control-validated at mountScene', () => {
+  it('an inline spec with min>max throws at mount, naming the control', async () => {
+    // engine.js passes inline scene OBJECTS straight to mountScene — they skip
+    // registerScene/validateScenes, so mountScene must guard them itself.
+    await expect(mountScene(
+      { id: 'inline.bad', space: 'plane2', params: { k: 0.5 },
+        controls: [slider('k', { min: 2, max: 1 })], entities: () => [] },
+      null, { backend: createNullBackend() },
+    )).rejects.toThrow(/controls\[0\].*`min` must be < `max`/);
+  });
+  it('an inline spec with an out-of-range initial value throws at mount', async () => {
+    await expect(mountScene(
+      { id: 'inline.oor', space: 'plane2', params: { k: 9 },
+        controls: [slider('k', { min: 0, max: 1 })], entities: () => [] },
+      null, { backend: createNullBackend() },
+    )).rejects.toThrow(/outside \[min,max\]/);
+  });
+  it('a well-formed inline spec mounts fine', async () => {
+    const c = await mountScene(
+      { id: 'inline.ok', space: 'plane2', params: { k: 0.5 },
+        controls: [slider('k', { min: 0, max: 1, step: 0.1 })], entities: () => [] },
+      null, { backend: createNullBackend() });
+    expect(c).toBeTruthy();
+    c.destroy();
+  });
+});
+
+describe('v1.4 slider headless drive seam (null backend setSliderValue)', () => {
+  const specOf = (over) => ({
+    id: 'sd.' + (over && over.id || 'x'), space: 'plane2', params: { k: 0.5 },
+    controls: [slider('k', { min: 0, max: 1, step: 0.1 })],
+    entities: (p) => [point(vec(p.k, 0), { key: 'p' })],
+    ...over,
+  });
+
+  it('setSliderValue writes THROUGH the atom and OPENS the learner-input gate', async () => {
+    const be = createNullBackend(), f = fakeRaf();
+    const c = await mountScene(specOf({ id: 'drive' }), null, { backend: be, raf: f.raf, caf: f.caf });
+    expect(c.hasLearnerInput()).toBe(false);       // mount alone never opens the gate
+    be.setSliderValue('k', 0.7);
+    expect(c.params.k.get()).toBeCloseTo(0.7, 9);  // one-way flow: atom updated
+    expect(c.hasLearnerInput()).toBe(true);        // a slider move IS learner input
+    f.tick(16);
+    expect(be._objects.get('p').v.x).toBeCloseTo(0.7, 9);        // re-rendered off the atom
+    expect(be._objects.get('p').v.y).toBe(0);
+    c.destroy();
+  });
+  it('clamps to [min,max] and snaps to step', async () => {
+    const be = createNullBackend();
+    const c = await mountScene(specOf({ id: 'clamp' }), null, { backend: be });
+    be.setSliderValue('k', 5);      expect(c.params.k.get()).toBe(1);    // clamped high
+    be.setSliderValue('k', -5);     expect(c.params.k.get()).toBe(0);    // clamped low
+    be.setSliderValue('k', 0.34);   expect(c.params.k.get()).toBe(0.3);  // snapped to 0.1 step, CLEAN (F3: no float noise)
+    c.destroy();
+  });
+  it('newAttempt RESETS the gate; a raw atom write does NOT open it (only slider moves do)', async () => {
+    const be = createNullBackend();
+    const c = await mountScene(specOf({ id: 'reset', randomize: (rng) => ({ k: rng() }) }), null, { backend: be });
+    be.setSliderValue('k', 0.8);
+    expect(c.hasLearnerInput()).toBe(true);
+    c.newAttempt(3);
+    expect(c.hasLearnerInput()).toBe(false);       // fresh attempt requires fresh input
+    c.params.k.set(0.2);                           // a programmatic write is NOT a learner move
+    expect(c.hasLearnerInput()).toBe(false);
+    c.destroy();
+  });
+  it('setSliderValue on an unbound param throws loudly', async () => {
+    const be = createNullBackend();
+    const c = await mountScene(specOf({ id: 'unbound' }), null, { backend: be });
+    expect(() => be.setSliderValue('zzz', 1)).toThrow(/no slider bound to param/);
+    c.destroy();
+  });
+});
+
+describe('v1.4 slider DOM overlay lifecycle (real-document path)', () => {
+  // Minimal DOM stub: records created nodes + listeners so we can drive an
+  // <input> 'input' event and assert the overlay is disposed on destroy().
+  function makeNode(tag){
+    return {
+      tagName: (tag || 'div').toUpperCase(), className: '', type: '', value: '', min: '', max: '', step: '',
+      textContent: '', valueAsNumber: 0, children: [], _attrs: {}, _listeners: {}, _removed: false,
+      setAttribute(k, v){ this._attrs[k] = v; }, getAttribute(k){ return this._attrs[k]; },
+      appendChild(c){ this.children.push(c); return c; }, remove(){ this._removed = true; },
+      addEventListener(t, fn){ (this._listeners[t] || (this._listeners[t] = [])).push(fn); },
+      dispatch(t){ (this._listeners[t] || []).forEach(fn => fn()); },
+    };
+  }
+
+  it('renders an accessible <input type=range> per slider, drives the atom on input, and disposes on destroy', async () => {
+    const prevDoc = globalThis.document;
+    const created = [];
+    globalThis.document = { createElement: (t) => { const n = makeNode(t); created.push(n); return n; } };
+    try {
+      const container = makeNode('div');
+      const be = createNullBackend();
+      const spec = {
+        id: 'sdom.range', space: 'plane2', params: { k: 0.25 },
+        controls: [slider('k', { min: 0, max: 1, step: 0.05, label: 'weight k', format: (v) => v.toFixed(2) })],
+        entities: (p) => [point(vec(p.k, 0), { key: 'p' })],
+      };
+      const c = await mountScene(spec, container, { backend: be });
+
+      const input = created.find(n => n.tagName === 'INPUT');
+      expect(input).toBeTruthy();
+      expect(input.type).toBe('range');
+      expect(input.min).toBe('0'); expect(input.max).toBe('1'); expect(input.step).toBe('0.05');
+      expect(input.getAttribute('aria-label')).toBe('weight k');   // keyboard/SR accessible
+      expect(input.value).toBe('0.25');                            // initial value follows the atom
+      const valEl = created.find(n => n.className === 'scene-control-value');
+      expect(valEl.textContent).toBe('0.25');                      // readout reflects format(atom)
+
+      // A learner drags the slider: set value + dispatch the input event.
+      input.valueAsNumber = 0.6; input.dispatch('input');
+      expect(c.params.k.get()).toBeCloseTo(0.6, 9);                // wrote through the atom
+      expect(c.hasLearnerInput()).toBe(true);                      // opened the gate
+      expect(valEl.textContent).toBe('0.60');                      // readout tracks the move
+
+      // Atom is the source of truth: an external write reflects back into the input.
+      c.params.k.set(0.1);
+      expect(input.value).toBe('0.1');
+      expect(valEl.textContent).toBe('0.10');
+
+      const overlay = created.find(n => n.className === 'scene-controls');
+      expect(overlay._removed).toBe(false);
+      c.destroy();
+      expect(overlay._removed).toBe(true);                         // no leaked DOM across dispose
+    } finally {
+      if(prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+    }
+  });
+
+  it('a slider without an explicit step declares step="any" (continuous, not the native step=1)', async () => {
+    const prevDoc = globalThis.document;
+    const created = [];
+    globalThis.document = { createElement: (t) => { const n = makeNode(t); created.push(n); return n; } };
+    try {
+      const container = makeNode('div');
+      const c = await mountScene({
+        id: 'sdom.cont', space: 'plane2', params: { k: 0.5 },
+        controls: [slider('k', { min: 0, max: 1 })], entities: () => [],
+      }, container, { backend: createNullBackend() });
+      const input = created.find(n => n.tagName === 'INPUT');
+      expect(input.step).toBe('any');
+      c.destroy();
+    } finally {
+      if(prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+    }
+  });
+
+  it('F1: a THROWING format aborts the mount with FULL cleanup (no leaked backend/DOM/subscriptions)', async () => {
+    const prevDoc = globalThis.document;
+    const created = [];
+    globalThis.document = { createElement: (t) => { const n = makeNode(t); created.push(n); return n; } };
+    try {
+      const container = makeNode('div');
+      const kAtom = param(0.5), mAtom = param(0.5);     // atoms we HOLD, to assert unsubscription
+      let destroyed = false;
+      const be = createNullBackend();
+      const origDestroy = be.destroy; be.destroy = () => { destroyed = true; origDestroy(); };
+      const spec = {
+        id: 'sdom.throw', space: 'plane2', params: { k: kAtom, m: mAtom },
+        controls: [
+          slider('k', { min: 0, max: 1 }),                                  // built OK — its sync sub is added
+          slider('m', { min: 0, max: 1, format: () => { throw new Error('boom'); } }),  // throws in initial sync
+        ],
+        entities: () => [],
+      };
+      await expect(mountScene(spec, container, { backend: be })).rejects.toThrow('boom');
+      // Every subscription armed during mount (per-atom requestFrame + the k sync)
+      // was unsubscribed by the aborting teardown:
+      expect(kAtom._subCount()).toBe(0);
+      expect(mAtom._subCount()).toBe(0);
+      expect(container.children.length).toBe(0);         // overlay never appended / removed
+      expect(destroyed).toBe(true);                      // backend torn down
+    } finally {
+      if(prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+    }
+  });
+
+  it('F2: an out-of-range atom value keeps the thumb and the readout in AGREEMENT (both clamped)', async () => {
+    const prevDoc = globalThis.document;
+    const created = [];
+    globalThis.document = { createElement: (t) => { const n = makeNode(t); created.push(n); return n; } };
+    try {
+      const container = makeNode('div');
+      // Inline spec would be rejected for an out-of-range INITIAL value, so start
+      // in range and push the atom out of range at runtime (a stray reroll draw).
+      const c = await mountScene({
+        id: 'sdom.oor', space: 'plane2', params: { k: 0.5 },
+        controls: [slider('k', { min: 0, max: 1, format: (v) => v.toFixed(1) })], entities: () => [],
+      }, container, { backend: createNullBackend() });
+      const input = created.find(n => n.tagName === 'INPUT');
+      const valEl = created.find(n => n.className === 'scene-control-value');
+      c.params.k.set(5);                                 // out of [0,1]
+      expect(input.value).toBe('1');                     // thumb clamped to max
+      expect(valEl.textContent).toBe('1.0');             // readout clamped to the SAME value (no divergence)
+      c.destroy();
+    } finally {
+      if(prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+    }
+  });
+
+  it('F3: default (no-format) readout shows a CLEAN snapped value, not float noise', async () => {
+    const prevDoc = globalThis.document;
+    const created = [];
+    globalThis.document = { createElement: (t) => { const n = makeNode(t); created.push(n); return n; } };
+    try {
+      const container = makeNode('div');
+      const c = await mountScene({
+        id: 'sdom.f3', space: 'plane2', params: { k: 0 },
+        controls: [slider('k', { min: 0, max: 1, step: 0.1 })], entities: () => [],   // no format
+      }, container, { backend: createNullBackend() });
+      const input = created.find(n => n.tagName === 'INPUT');
+      const valEl = created.find(n => n.className === 'scene-control-value');
+      input.valueAsNumber = 0.34; input.dispatch('input');
+      expect(c.params.k.get()).toBe(0.3);                // ATOM holds exactly 0.3, not 0.30000000000000004
+      expect(valEl.textContent).toBe('0.3');             // default String(0.3) readout is presentable
+      c.destroy();
+    } finally {
+      if(prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+    }
   });
 });
