@@ -120,6 +120,19 @@ async function enterScenes(id) {
   await tick();
 }
 
+// Drive the standard quiz step to a PASS. Uses a NUMERIC question: `mc` option
+// buttons are bound via querySelectorAll (the stub returns [] — unclickable),
+// whereas numeric uses single querySelector, which the stub caches. Answering
+// correctly → ctx.correct → the "Finish quiz" (#nq) button → finish().
+function passNumericQuiz(value) {
+  const qp = stepBody().querySelector('#qpanel');
+  const qbody = qp.querySelector('#qbody');
+  qbody.querySelector('.num-in').value = String(value);
+  qbody.querySelector('#numsub').onclick();   // submit → correct
+  qp.querySelector('#nq').onclick();          // Finish quiz → finish() → completeLesson
+}
+const NUM_QUIZ = [{ type: 'numeric', q: 'What is 2 + 2?', answer: 4, tol: 0.5, why: 'ok' }];
+
 // A real kit scene spec: one draggable point, one goal (drag it above y=2).
 const EXT = 5.5;
 function mkScene(id, opts = {}) {
@@ -258,11 +271,11 @@ describe('v1.4 §1 sequencing: Learn-first shell around the scene arc', () => {
     expect(nextBtn().textContent).toBe('');             // advance still gated
   });
 
-  it('full arc learn→scene1→scene2→capstone→complete, then New attempt KEEPS completion', async () => {
+  it('full arc: capstone GATES INTO the quiz (v1.4 §1 architect ruling) — capstone credit ≠ complete; quiz pass completes', async () => {
     addScenesLesson('sq-arc', [
       mkScene('s1'), mkScene('s2'),
       mkScene('cap', { capstone: true, randomize: () => ({ p: vec(2, 1) }) }),
-    ]);
+    ], NUM_QUIZ);
     ['s1', 's2', 'cap'].forEach((k) => delete S.missions['sq-arc::' + k]);
     delete S.done['sq-arc'];
     await enterScenes('sq-arc');                        // Learn → scene 1
@@ -274,22 +287,27 @@ describe('v1.4 §1 sequencing: Learn-first shell around the scene arc', () => {
     expect(S.missions['sq-arc::s2']).toEqual({ 0: true });
     nextBtn().onclick(); await tick();                 // → capstone
     expect(typeof stepBody().querySelector('#reattempt').onclick).toBe('function');
-    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // pass the capstone
-    expect(nextBtn().textContent).toBe('Finish 🏁');
-    nextBtn().onclick();                               // capstone gates completion
-    expect(S.done['sq-arc']).toBe(true);
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // credit the capstone
+    expect(S.missions['sq-arc::cap']).toEqual({ 0: true });
+    // Capstone GATES completion but is NOT sufficient — it routes into the quiz.
+    expect(nextBtn().textContent).toBe('Take the quiz →');
+    expect(S.done['sq-arc']).toBeUndefined();          // capstone credit alone ≠ complete
+    nextBtn().onclick();                               // → showQuiz (quiz still required)
+    expect(stepBody().querySelector('#qpanel').innerHTML).toContain('QUESTION');
+    expect(S.done['sq-arc']).toBeUndefined();          // still not complete until the quiz passes
+    passNumericQuiz(4);                                // answer correctly → finish()
+    expect(S.done['sq-arc']).toBe(true);               // quiz pass completes the lesson
     const xpAfter = S.xp;
 
-    // Retake = capstone re-attempt. Revisit, walk to the capstone, reroll, re-pass.
+    // Retake = capstone re-attempt (semantics unchanged): New attempt must not un-complete.
     await enterScenes('sq-arc');                        // Learn → scene 1 (saved → re-arms)
     nextBtn().onclick(); await tick();                 // → scene 2 (saved → re-arms)
-    nextBtn().onclick(); await tick();                 // → capstone
+    nextBtn().onclick(); await tick();                 // → capstone (saved → arms 'Take the quiz →')
+    expect(nextBtn().textContent).toBe('Take the quiz →');
     stepBody().querySelector('#reattempt').onclick();  // newAttempt → resetAttempt → baseline
-    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // re-pass in the fresh attempt
-    expect(nextBtn().textContent).toBe('Finish 🏁');
-    nextBtn().onclick();
-    expect(S.done['sq-arc']).toBe(true);               // STILL complete after retake
+    expect(S.done['sq-arc']).toBe(true);               // STILL complete after the retake
     expect(S.missions['sq-arc::s1']).toEqual({ 0: true });  // earlier scenes stay complete
+    expect(S.missions['sq-arc::cap']).toEqual({ 0: true }); // capstone credit persists across reroll
     expect(S.xp).toBe(xpAfter);                        // no second lesson bonus / no double credit
   });
 
