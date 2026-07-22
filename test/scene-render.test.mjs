@@ -109,6 +109,30 @@ function dragTo(extent, from, to) {
   surfaceEl().dispatch('pointerup', clientAt(to, extent));
 }
 
+// v1.4 §1: EVERY lesson (scenes included) opens on the Learn step. The scene
+// arc replaces the labs step and is entered via Learn's "Try it yourself"
+// (#next). This helper walks Learn → scene arc, then lets the async mount
+// settle — the standard entry a learner takes.
+const learnNext = () => stepBody().querySelector('#next');
+async function enterScenes(id) {
+  go('lesson', id);
+  learnNext().onclick();      // "Try it yourself →" → renderScenes
+  await tick();
+}
+
+// Drive the standard quiz step to a PASS. Uses a NUMERIC question: `mc` option
+// buttons are bound via querySelectorAll (the stub returns [] — unclickable),
+// whereas numeric uses single querySelector, which the stub caches. Answering
+// correctly → ctx.correct → the "Finish quiz" (#nq) button → finish().
+function passNumericQuiz(value) {
+  const qp = stepBody().querySelector('#qpanel');
+  const qbody = qp.querySelector('#qbody');
+  qbody.querySelector('.num-in').value = String(value);
+  qbody.querySelector('#numsub').onclick();   // submit → correct
+  qp.querySelector('#nq').onclick();          // Finish quiz → finish() → completeLesson
+}
+const NUM_QUIZ = [{ type: 'numeric', q: 'What is 2 + 2?', answer: 4, tol: 0.5, why: 'ok' }];
+
 // A real kit scene spec: one draggable point, one goal (drag it above y=2).
 const EXT = 5.5;
 function mkScene(id, opts = {}) {
@@ -129,8 +153,7 @@ describe('renderScenes: real mountScene + live pointer input', () => {
   it('drag completes a goal, arms advance; input gate blocks param sweeps', async () => {
     addScenesLesson('sc-live', [mkScene('a'), mkScene('cap', { capstone: true })]);
     delete S.missions['sc-live::a']; delete S.missions['sc-live::cap']; delete S.done['sc-live'];
-    go('lesson', 'sc-live');
-    await tick();                                   // async mount settles
+    await enterScenes('sc-live');                   // Learn → scene arc, mount settles
     expect(nextBtn().textContent).toBe('');         // gated before any input
     dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });    // real pointer flow
     expect(S.missions['sc-live::a']).toEqual({ 0: true });   // lessonId::sceneId
@@ -152,8 +175,7 @@ describe('renderScenes: real mountScene + live pointer input', () => {
     expect(S.xp).toBeGreaterThanOrEqual(xpBeforeFinish + SCORING.lessonBonus);
 
     // Revisit: saved goals arm advance via the deferred tick; refinish grants 0.
-    go('lesson', 'sc-live');
-    await tick();
+    await enterScenes('sc-live');
     expect(nextBtn().disabled).toBe(false);
     nextBtn().onclick();                            // → capstone
     await tick();
@@ -166,8 +188,7 @@ describe('renderScenes: real mountScene + live pointer input', () => {
   it('a MID-SEQUENCE capstone is demoted to a normal scene (position guard)', async () => {
     addScenesLesson('sc-midcap', [mkScene('early', { capstone: true }), mkScene('after')]);
     delete S.missions['sc-midcap::early']; delete S.missions['sc-midcap::after']; delete S.done['sc-midcap'];
-    go('lesson', 'sc-midcap');
-    await tick();
+    await enterScenes('sc-midcap');
     dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });
     // NOT 'Finish 🏁' — the mid capstone must not end the lesson and skip scene 2
     expect(nextBtn().textContent).toBe('Next scene →');
@@ -181,8 +202,7 @@ describe('renderScenes: real mountScene + live pointer input', () => {
   it('a scenes lesson WITHOUT a capstone routes its last scene to the quiz gate', async () => {
     addScenesLesson('sc-quiz', [mkScene('only')], [{ q: '2+2?', opts: ['3', '4'], a: 1, why: '.' }]);
     delete S.missions['sc-quiz::only']; delete S.done['sc-quiz'];
-    go('lesson', 'sc-quiz');
-    await tick();
+    await enterScenes('sc-quiz');
     dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });
     expect(nextBtn().textContent).toBe('Take the quiz →');
     const btn = nextBtn();
@@ -194,8 +214,7 @@ describe('renderScenes: real mountScene + live pointer input', () => {
   it('a zero-goal scene arms advance with no goals box and no mission entry (v1.3 §4)', async () => {
     addScenesLesson('sc-deco', [mkScene('deco', { goals: [] }), mkScene('real')]);
     delete S.missions['sc-deco::deco']; delete S.missions['sc-deco::real']; delete S.done['sc-deco'];
-    go('lesson', 'sc-deco');
-    await tick();
+    await enterScenes('sc-deco');
     expect(nextBtn().disabled).toBe(false);            // decorative: nothing to gate
     expect(nextBtn().textContent).toBe('Next scene →');
     expect(S.missions['sc-deco::deco']).toBeUndefined();
@@ -212,8 +231,7 @@ describe('renderScenes: real mountScene + live pointer input', () => {
     });
     addScenesLesson('sc-retry', [capSpec]);
     delete S.missions['sc-retry::vcap']; delete S.done['sc-retry'];
-    go('lesson', 'sc-retry');
-    await tick();
+    await enterScenes('sc-retry');
     const rb = stepBody().querySelector('#reattempt');
     expect(typeof rb.onclick).toBe('function');        // affordance rendered on capstones
     dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });       // attempt 1: banks 'up'
@@ -230,5 +248,112 @@ describe('renderScenes: real mountScene + live pointer input', () => {
     const legacy = LESSONS.find(l => !l.scenes);
     go('lesson', legacy.id);
     expect(stepBody().innerHTML).toContain('Learn');
+  });
+});
+
+/* v1.4 §1 — scenes-lesson SEQUENCING: Learn step FIRST, scene arc REPLACES the
+   labs step, capstone gates completion, retake = capstone re-attempt, earlier
+   scenes stay completed, progress persists per lessonId::sceneId across reload
+   and back-navigation. */
+describe('v1.4 §1 sequencing: Learn-first shell around the scene arc', () => {
+  it('a scenes lesson OPENS on the Learn step, not the scene canvas', async () => {
+    addScenesLesson('sq-seq', [mkScene('s1'), mkScene('cap', { capstone: true })]);
+    delete S.missions['sq-seq::s1']; delete S.missions['sq-seq::cap']; delete S.done['sq-seq'];
+    go('lesson', 'sq-seq');
+    // Learn renders first: learn/ml body present, scene surface NOT mounted.
+    expect(stepBody().innerHTML).toContain('📖 Learn');
+    expect(stepBody().innerHTML).not.toContain('scene-canvas');
+    // "Try it yourself →" enters the arc; entry credits nothing (learner-input gate).
+    learnNext().onclick();
+    await tick();
+    expect(stepBody().innerHTML).toContain('scene-canvas');
+    expect(S.missions['sq-seq::s1']).toBeUndefined();   // no credit on a step transition
+    expect(nextBtn().textContent).toBe('');             // advance still gated
+  });
+
+  it('full arc: capstone GATES INTO the quiz (v1.4 §1 architect ruling) — capstone credit ≠ complete; quiz pass completes', async () => {
+    addScenesLesson('sq-arc', [
+      mkScene('s1'), mkScene('s2'),
+      mkScene('cap', { capstone: true, randomize: () => ({ p: vec(2, 1) }) }),
+    ], NUM_QUIZ);
+    ['s1', 's2', 'cap'].forEach((k) => delete S.missions['sq-arc::' + k]);
+    delete S.done['sq-arc'];
+    await enterScenes('sq-arc');                        // Learn → scene 1
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // scene 1 goals
+    expect(S.missions['sq-arc::s1']).toEqual({ 0: true });
+    expect(nextBtn().textContent).toBe('Next scene →');
+    nextBtn().onclick(); await tick();                 // → scene 2
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // scene 2 goals
+    expect(S.missions['sq-arc::s2']).toEqual({ 0: true });
+    nextBtn().onclick(); await tick();                 // → capstone
+    expect(typeof stepBody().querySelector('#reattempt').onclick).toBe('function');
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // credit the capstone
+    expect(S.missions['sq-arc::cap']).toEqual({ 0: true });
+    // Capstone GATES completion but is NOT sufficient — it routes into the quiz.
+    expect(nextBtn().textContent).toBe('Take the quiz →');
+    expect(S.done['sq-arc']).toBeUndefined();          // capstone credit alone ≠ complete
+    nextBtn().onclick();                               // → showQuiz (quiz still required)
+    expect(stepBody().querySelector('#qpanel').innerHTML).toContain('QUESTION');
+    expect(S.done['sq-arc']).toBeUndefined();          // still not complete until the quiz passes
+    passNumericQuiz(4);                                // answer correctly → finish()
+    expect(S.done['sq-arc']).toBe(true);               // quiz pass completes the lesson
+    const xpAfter = S.xp;
+
+    // Retake = capstone re-attempt (semantics unchanged): New attempt must not un-complete.
+    await enterScenes('sq-arc');                        // Learn → scene 1 (saved → re-arms)
+    nextBtn().onclick(); await tick();                 // → scene 2 (saved → re-arms)
+    nextBtn().onclick(); await tick();                 // → capstone (saved → arms 'Take the quiz →')
+    expect(nextBtn().textContent).toBe('Take the quiz →');
+    stepBody().querySelector('#reattempt').onclick();  // newAttempt → resetAttempt → baseline
+    expect(S.done['sq-arc']).toBe(true);               // STILL complete after the retake
+    expect(S.missions['sq-arc::s1']).toEqual({ 0: true });  // earlier scenes stay complete
+    expect(S.missions['sq-arc::cap']).toEqual({ 0: true }); // capstone credit persists across reroll
+    expect(S.xp).toBe(xpAfter);                        // no second lesson bonus / no double credit
+  });
+
+  it('scene completion SURVIVES a reload mid-arc and resumes (persist per lessonId::sceneId)', async () => {
+    addScenesLesson('sq-reload', [mkScene('s1'), mkScene('s2'), mkScene('cap', { capstone: true })]);
+    ['s1', 's2', 'cap'].forEach((k) => delete S.missions['sq-reload::' + k]);
+    delete S.done['sq-reload'];
+    await enterScenes('sq-reload');
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // complete scene 1
+    expect(S.missions['sq-reload::s1']).toEqual({ 0: true });
+    // "reload": tear down to the map (runCleanups disposes the controller), re-enter.
+    go('home');
+    await enterScenes('sq-reload');                    // Learn → scene 1 again
+    await tick();                                      // deferred onAllDone from the saved goal
+    expect(S.missions['sq-reload::s1']).toEqual({ 0: true });   // survived the reload
+    expect(nextBtn().disabled).toBe(false);            // saved goal re-arms advance — no re-drag
+    expect(S.done['sq-reload']).toBeUndefined();       // not falsely completed by the resume
+  });
+
+  it('§2: the REAL la-dot lesson opens on Learn, then its scene arc replaces the labs step', async () => {
+    const lesson = LESSONS.find((l) => l.id === 'la-dot');
+    expect(lesson.labs, 'la-dot must have no legacy labs (scenes-first)').toBeUndefined();
+    go('lesson', 'la-dot');
+    expect(stepBody().innerHTML).toContain('📖 Learn');           // Learn step first
+    expect(stepBody().innerHTML).toContain('dot product');        // real learn body
+    expect(stepBody().innerHTML).not.toContain('scene-canvas');   // arc not mounted yet
+    learnNext().onclick();
+    await tick();
+    expect(stepBody().innerHTML).toContain('scene-canvas');       // real scene arc = the labs step
+    expect(S.done['la-dot']).toBeUndefined();                     // entering the arc completes nothing
+  });
+
+  it('back from the FIRST scene returns to Learn; revisiting a completed scene never un-completes or double-credits', async () => {
+    addScenesLesson('sq-back', [mkScene('s1'), mkScene('s2')]);
+    delete S.missions['sq-back::s1']; delete S.missions['sq-back::s2']; delete S.done['sq-back'];
+    await enterScenes('sq-back');
+    dragTo(EXT, { x: 2, y: 1 }, { x: 2, y: 4 });        // complete scene 1
+    expect(S.missions['sq-back::s1']).toEqual({ 0: true });
+    const xp1 = S.xp;
+    nextBtn().onclick(); await tick();                 // → scene 2
+    // back to the completed scene 1: stays complete, no re-credit.
+    stepBody().querySelector('#back').onclick(); await tick();
+    expect(S.missions['sq-back::s1']).toEqual({ 0: true });
+    expect(S.xp).toBe(xp1);
+    // back from the first scene lands on the Learn step (v1.4 §1), not the Map.
+    stepBody().querySelector('#back').onclick();
+    expect(stepBody().innerHTML).toContain('📖 Learn');
   });
 });

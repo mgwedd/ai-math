@@ -64,6 +64,10 @@ describe('the shipped curriculum is coherent', () => {
   it('resolves every interactive / labs key to a registered function', () => {
     const unresolved = [];
     for (const l of LESSONS) {
+      // A scenes-first lesson (v1.4 §2, e.g. la-dot) carries no labs/interactive —
+      // its interactive content is `scenes`, resolved against SCENES by
+      // validateCurriculum/validateSceneLessons, not by this labs-key check.
+      if (l.scenes && l.scenes.length && !(l.labs && l.labs.length) && !l.interactive) continue;
       const keys = (l.labs && l.labs.length) ? l.labs.map(x => x && x.interactive) : [l.interactive];
       for (const k of keys) if (!k || typeof INTERACTIVES[k] !== 'function') unresolved.push(`${l.id} → ${k}`);
     }
@@ -723,8 +727,10 @@ describe('scene-lesson validation — capstone placement (Scene Kit CONTRACT §7
       'dot.search', 'dot.attention', 'dot.capstone',
     ]);
     expect(lesson.scenes[lesson.scenes.length - 1]).toBe('dot.capstone'); // capstone LAST
-    // the old lab is untouched — additive, not a replacement
-    expect(lesson.labs.some((l) => l.interactive === 'dot')).toBe(true);
+    // v1.4 §2: la-dot is SCENES-FIRST — the legacy `labs` block was removed so
+    // the scene arc IS the labs step (INTERACTIVES.dot stays in-tree, unreferenced).
+    expect(lesson.labs).toBeUndefined();
+    expect(lesson.interactive).toBeUndefined();
     const errs = validateCurriculum().filter((e) => e.includes('"la-dot"'));
     expect(errs).toEqual([]);
   });
