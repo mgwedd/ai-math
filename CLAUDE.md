@@ -14,9 +14,22 @@ sweeps. Targeted `grep -n` on a file you already know is still fine.
 
 **Freshness:** the graph reflects `main` at the last extract, not your
 branch's uncommitted or new symbols — use grep/read for content introduced
-by the diff you're working on. The `.githooks/post-merge` hook auto-rebuilds
-the graph after pulls on the main checkout. If `graphify query` misses a
-symbol you know landed on main, rebuild manually:
+by the diff you're working on.
+
+PRs merge on GitHub, so nothing refreshes locally at merge time: the graph
+is only as fresh as the main checkout's last `git pull` (the
+`.githooks/post-merge` hook rebuilds it on that pull, including
+fast-forwards). Agents should self-heal staleness — before leaning on the
+kbase, check whether the main checkout trails origin:
+
+```bash
+git -C /Users/wedd/dev/ai-math fetch origin main --quiet && git -C /Users/wedd/dev/ai-math rev-list --count HEAD..origin/main
+```
+
+If the count is non-zero and the main checkout is clean and on `main`, run
+`git -C /Users/wedd/dev/ai-math pull --ff-only` — the hook then rebuilds the
+graph automatically. If `graphify query` still misses a symbol you know
+landed on main, rebuild manually from the main checkout:
 
 ```bash
 graphify extract . --code-only --force
