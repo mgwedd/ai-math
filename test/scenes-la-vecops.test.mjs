@@ -70,6 +70,14 @@ describe('registration + validation', () => {
       }
     }
   });
+  it('EVERY goal (not just the capstone) carries a tag and a non-empty focus', () => {
+    for (const s of scenesForLesson(LESSON)) {
+      s.goals.forEach((g, i) => {
+        expect(g.tag, s.id + ' #' + i + ' tag').toBeTruthy();
+        expect(typeof g.focus === 'string' && g.focus.length > 0, s.id + ' #' + i + ' focus').toBe(true);
+      });
+    }
+  });
 });
 
 /* THE GOAL-BASELINE INVARIANT + REACHABILITY — via the shared helpers
@@ -145,6 +153,15 @@ describe('capstone: weak-area tag migration + the official reroll seam', () => {
    ungameable (quality's explicit carve-out). Every magnitude/determinant
    goal: degenerate strategy stays false; legit strategy credits. */
 describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
+  it('vecops.addition g1 (cancel the height): two already-flat arrows must NOT credit; a real up/down pair does', () => {
+    const s = sceneAt(0);
+    // two flat horizontal arrows sum flat without any cancellation happening
+    expect(s.goals[1].predicate({ a: { x: 2, y: 0 }, b: { x: 2, y: 0 } })).toBe(false);
+    // one flat, one carrying all the height — still not an opposing cancellation
+    expect(s.goals[1].predicate({ a: { x: 3, y: 0 }, b: { x: 1, y: 0.05 } })).toBe(false);
+    // legitimate: genuine opposing vertical components that cancel to a flat sum
+    expect(s.goals[1].predicate({ a: { x: 2, y: 1 }, b: { x: 1, y: -1 } })).toBe(true);
+  });
   it('vecops.addition g2 (cancel to 0): shrinking both arrows to nothing must NOT credit', () => {
     const s = sceneAt(0);
     expect(s.goals[2].predicate({ a: { x: 0, y: 0 }, b: { x: 0, y: 0 } })).toBe(false);
