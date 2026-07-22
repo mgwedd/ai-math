@@ -9,3 +9,6 @@ out/
 
 # local self-host: optional host bind-mount for Postgres data (docs/DEPLOYMENT.md)
 .pgdata/
+
+# graphify knowledge graph (local tooling; symlinked into agent worktrees)
+graphify-out
