@@ -1,0 +1,12 @@
+#!/bin/sh
+# Refresh the graphify kbase after a pull/merge so graphify-out/ tracks main.
+# Silent no-op when graphify isn't installed or the kbase was never built.
+# Only regenerate from the main checkout on the main branch — a worktree's
+# graphify-out is a symlink to the shared graph, and regenerating there would
+# index branch state into it.
+command -v graphify >/dev/null 2>&1 || PATH="$HOME/.local/bin:$PATH"
+command -v graphify >/dev/null 2>&1 || exit 0
+[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] || exit 0
+[ -d graphify-out ] && [ ! -L graphify-out ] || exit 0
+graphify extract . --code-only --force >/dev/null 2>&1 &
+exit 0
