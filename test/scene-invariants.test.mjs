@@ -73,6 +73,22 @@ describe('(a) baseline-cleanliness has teeth', () => {
     expect(assertBaselineClean(cap, { seeds: 1000 })).toBe(true);
   });
 
+  it('FLAGS a randomized scene whose initial params diverge and are dirty, even when every seed draw is clean', () => {
+    // Authoring error: params doesn't match any randomize() draw AND is
+    // pre-satisfied. The seed loop would miss it; the always-checked initial
+    // params must catch it.
+    const cap = {
+      id: '__inv_divergent', capstone: true, space: 'plane2',
+      params: { a: vec(3, 0) },                              // dirty: x>0, not a draw
+      entities: (p) => [{ kind: 'vector', v: p.a, handle: 'a' }],
+      randomize: (rng) => ({ a: vec(-(1 + rng() * 3), 0) }), // every draw x<0 (clean)
+      goals: [{ text: 'x positive', predicate: (s) => s.a.x > 0, xp: 10 }],
+    };
+    const bad = baselineViolations(cap, { seeds: 100 });
+    expect(bad.length).toBe(1);
+    expect(bad[0]).toContain('initial params');
+  });
+
   it('a throwing predicate is treated as NOT satisfied (baseline stays clean)', () => {
     const scene = sceneWith({ a: vec(1, 1) }, [
       { text: 'boom', predicate: () => { throw new Error('boom'); }, xp: 10 },

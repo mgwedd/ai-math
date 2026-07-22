@@ -93,14 +93,17 @@ function goalsOf(scene) {
  * Each entry is { label, s }.
  */
 function baselineStates(scene, seeds) {
+  // The actual mounted state is ALWAYS scene.params — check it unconditionally.
+  // For a randomized capstone params SHOULD equal randomize(makeRng(1)) (CONTRACT
+  // §1), but an author who diverges the two would otherwise ship an unchecked
+  // initial state; including it here catches that mistake.
+  const out = [{ label: 'initial params', s: initialSnapshot(scene) }];
   if (typeof scene.randomize === 'function') {
-    const out = [];
     for (let seed = 1; seed <= seeds; seed++) {
       out.push({ label: 'seed ' + seed, s: scene.randomize(makeRng(seed)) });
     }
-    return out;
   }
-  return [{ label: 'initial', s: initialSnapshot(scene) }];
+  return out;
 }
 
 /**
