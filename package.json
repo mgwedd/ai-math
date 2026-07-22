@@ -14,9 +14,9 @@
     "hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.0",
+    "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.2",
-    "katex": "^0.17.0",
+    "katex": "^0.18.1",
     "next": "^15.3.3",
     "pg": "^8.22.0",
     "pixi.js": "^8.19.0",
@@ -25,7 +25,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.111.0",
+    "@anthropic-ai/sdk": "^0.112.3",
     "vitest": "^4.1.10"
   }
 }
