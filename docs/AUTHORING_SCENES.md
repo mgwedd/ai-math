@@ -220,7 +220,10 @@ registerScene({
 - **`frame: 'inset'`** on any entity routes it into the inset sub-space; the
   default is `frame: 'main'`. An inset entity's positions (and a `label`'s `at`)
   are in the **inset's** world coords, not the main space's. The kit draws the
-  inset as a masked, subtly-bordered box — you just place entities in it.
+  inset as a masked, subtly-bordered box — you just place entities in it. A
+  `label(..., { at: 'readout' })` **cannot** go in the inset (the readout is the
+  DOM a11y strip, not a sub-space) — `validateScenes()` rejects it; give an inset
+  label an explicit `at: vec(...)`.
 - **The inset is READ-ONLY** in v1.6: params **drive** it (that's the whole
   point — a trace visual), but you **cannot** put a `handle` on a `frame:'inset'`
   entity. `validateScenes()` rejects that, and rejects `frame:'inset'` in a scene
