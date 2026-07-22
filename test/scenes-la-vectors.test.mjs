@@ -27,7 +27,6 @@ const EXPECTED_IDS = [
 // pure helpers (mirror ./vec-math) for witnesses + anti-gaming states
 const mag = (v) => Math.hypot(v.x, v.y);
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
-const rot = (v, th) => { const c = Math.cos(th), s = Math.sin(th); return { x: v.x * c - v.y * s, y: v.x * s + v.y * c }; };
 
 beforeAll(async () => {
   ({ makeRng, validateScenes } = await import('../lib/scene/index.js'));

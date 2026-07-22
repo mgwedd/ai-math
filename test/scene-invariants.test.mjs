@@ -13,7 +13,7 @@
    into the SCENES registry.
    ================================================================ */
 import { describe, it, expect } from 'vitest';
-import { vec, makeRng } from '../lib/scene/index.js';
+import { vec } from '../lib/scene/index.js';
 import {
   baselineViolations, assertBaselineClean,
   reachability, unreachableGoals, assertReachable, handleDims, initialSnapshot,

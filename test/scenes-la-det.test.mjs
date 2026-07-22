@@ -21,10 +21,6 @@ const EXPECTED_IDS = [
   'det.scale', 'det.area', 'det.capstone',
 ];
 
-const mag = (v) => Math.hypot(v.x, v.y);
-const det2 = (a, b) => a.x * b.y - a.y * b.x;
-const dot = (a, b) => a.x * b.x + a.y * b.y;
-
 beforeAll(async () => {
   ({ makeRng, validateScenes } = await import('../lib/scene/index.js'));
   const res = await import('../lib/curriculum/scenes/index.js');   // registers all scene modules

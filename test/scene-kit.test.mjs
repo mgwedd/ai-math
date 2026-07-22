@@ -29,18 +29,17 @@ import {
 const HAVE_KIT = kitPresent();
 if (!HAVE_KIT) {
   // One visible breadcrumb so a green run doesn't hide the fact these are dormant.
-  // eslint-disable-next-line no-console
   console.warn('[scene-kit] lib/scene not present on this branch — real-kit invariant tests are SKIPPED. Integrate a peer branch to activate.');
 }
 
-let registry, params, entitiesMod, diffMod, pub;
+let registry, params, entitiesMod, pub;
 beforeAll(async () => {
   if (!HAVE_KIT) return;
   installSceneDom();
   registry = await importScene('registry.js');
   params = await importScene('params.js');
   entitiesMod = await importScene('entities.js');
-  diffMod = await importScene('diff.js');
+  await importScene('diff.js');
   // Public surface (§8 mountScene, null backend, param/vec/visited/makeRng) — the
   // REAL controller for the v1.2 gate + capstone-reroll tests (no vacuous stubs).
   pub = await importScene('index.js');
