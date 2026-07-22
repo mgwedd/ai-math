@@ -34,10 +34,8 @@ const EXPECTED_IDS = [
 ];
 
 // pure vec helpers for building witness states (mirror ./vec-math)
-const mag = (v) => Math.hypot(v.x, v.y);
 const dot = (a, b) => a.x * b.x + a.y * b.y;
 const scale = (v, k) => ({ x: v.x * k, y: v.y * k });
-const unit = (v) => { const m = mag(v) || 1; return { x: v.x / m, y: v.y / m }; };
 const fromPolar = (r, th) => ({ x: r * Math.cos(th), y: r * Math.sin(th) });
 const angleOf = (v) => Math.atan2(v.y, v.x);
 

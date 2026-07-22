@@ -26,9 +26,7 @@ const EXPECTED_IDS = [
 // pure helpers (mirror ./vec-math) for witnesses + anti-gaming states
 const mag = (v) => Math.hypot(v.x, v.y);
 const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
-const dot = (a, b) => a.x * b.x + a.y * b.y;
 const matApply = (c1, c2, v) => ({ x: c1.x * v.x + c2.x * v.y, y: c1.y * v.x + c2.y * v.y });
-const matMul = (bc1, bc2, ac1, ac2) => ({ c1: matApply(bc1, bc2, ac1), c2: matApply(bc1, bc2, ac2) });
 const rot = (v, th) => {
   const c = Math.cos(th), s = Math.sin(th);
   return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };

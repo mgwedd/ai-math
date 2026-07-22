@@ -173,7 +173,7 @@ async function research(concept, args) {
 }
 
 /* ---------- stage 3: generate (LIVE ONLY — lazy SDK import) ---------- */
-async function generateCandidates(prompt, count) {
+async function generateCandidates(prompt, _count) {
   // Dynamic import so neither the app nor the test suite ever require the SDK.
   let Anthropic;
   try { ({ default: Anthropic } = await import('@anthropic-ai/sdk')); }
@@ -204,7 +204,7 @@ function parseCandidates(text) {
 /* ---------- stage 4: schema gate ---------- */
 function schemaOk(candidate) {
   // strip the pipeline-only field before the shared validator sees it
-  const { wolfram_check, ...q } = candidate;
+  const { wolfram_check: _wolfram_check, ...q } = candidate;
   return questionProblems(q).length === 0;
 }
 
@@ -302,7 +302,7 @@ async function main() {
 
     for (const cand of candidates) {
       if (!schemaOk(cand)) { dropped++; continue; }
-      const { wolfram_check, ...q } = cand;
+      const { wolfram_check: _wolfram_check, ...q } = cand;
 
       // Wolfram gate: mc/numeric must verify; order questions aren't CAS-checkable
       // (template generators cover those shapes) so they're dropped here.
