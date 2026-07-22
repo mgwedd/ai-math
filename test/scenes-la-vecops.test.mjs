@@ -1,13 +1,15 @@
 /* Scene lesson — la-vecops headless tests (Vitest, node env).
 
-   P1 migration wave 1. Scenes are DATA + PURE PREDICATES; these need no
-   GPU. Baseline-cleanliness and reachability are asserted through the
-   SHARED quality helpers (CONTRACT v1.4 §6, test/helpers/scene-invariants.mjs
-   — copied from origin/ai/p1-quality @ bbb3a2b ahead of integration; the
-   chief architect dedupes at merge). The helpers cover baseline + reachability
-   but NOT gameability, so every magnitude/determinant goal additionally carries
-   a per-goal ANTI-GAMING test in the la-dot style (degenerate strategy stays
-   false; legit strategy credits). Tag migration + the reroll seam round it out. */
+   P1 migration wave 1; scalar controls retrofitted to the v1.4 `slider`
+   seam in P2 wave B (semantics-preserving — same goals/targets/tags/
+   anti-gaming, only the control mechanism changed). Scenes are DATA +
+   PURE PREDICATES; these need no GPU. Baseline-cleanliness and
+   reachability are asserted through the SHARED quality helpers (CONTRACT
+   v1.4 §6, test/helpers/scene-invariants.mjs). The helpers cover baseline
+   + reachability but NOT gameability, so every magnitude/determinant goal
+   additionally carries a per-goal ANTI-GAMING test in the la-dot style
+   (degenerate strategy stays false; legit strategy credits). Tag
+   migration + the reroll seam round it out. */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { assertBaselineClean, assertReachable } from './helpers/scene-invariants.mjs';
 
@@ -25,17 +27,6 @@ const mag = (v) => Math.hypot(v.x, v.y);
 const dot = (a, b) => a.x * b.x + a.y * b.y;
 const det2 = (a, b) => a.x * b.y - a.y * b.x;
 const solve2 = (a, b, t) => ({ c1: det2(t, b) / det2(a, b), c2: det2(a, t) / det2(a, b) });
-const mapRange = (x, a0, a1, b0, b1) => b0 + ((x - a0) / (a1 - a0)) * (b1 - b0);
-
-// track constants (replicated from la-vecops.js — module-scoped there)
-const SC_X = 5.4, C_MIN = -2.5, C_MAX = 2.5;
-const yForCS = (c) => mapRange(c, C_MIN, C_MAX, -4, 4);
-const C1_X = 5.0, C2_X = 5.9, K_MIN = -3, K_MAX = 3;
-const yForK = (k) => mapRange(k, K_MIN, K_MAX, -4, 4);
-const CV_X = 5.4, CV_LO = -4, CV_HI = 4;
-const VALS = [{ x: -2.4, y: -1.2 }, { x: 2.6, y: -0.8 }, { x: 0.2, y: 2.8 }];
-const CAP_C1_X = 5.0, CAP_C2_X = 5.9, CAP_KMIN = -2.6, CAP_KMAX = 2.6;
-const capYForK = (k) => mapRange(k, CAP_KMIN, CAP_KMAX, -4, 4);
 
 beforeAll(async () => {
   ({ makeRng, validateScenes } = await import('../lib/scene/index.js'));
@@ -78,6 +69,20 @@ describe('registration + validation', () => {
       });
     }
   });
+  it('scalar controls are real v1.4 sliders bound to scalar params (retrofitted from the track fallback)', () => {
+    const expectSlider = (scene, params) => {
+      expect(Array.isArray(scene.controls)).toBe(true);
+      expect(scene.controls.map((c) => c.param)).toEqual(params);
+      for (const c of scene.controls) {
+        expect(c.kind).toBe('slider');
+        expect(typeof scene.params[c.param]).toBe('number');
+      }
+    };
+    expectSlider(sceneAt(1), ['c']);            // scaling
+    expectSlider(sceneAt(2), ['c1', 'c2']);      // combination
+    expectSlider(sceneAt(4), ['temp']);          // convex
+    expectSlider(capstoneFor(LESSON), ['c1', 'c2']);
+  });
 });
 
 /* THE GOAL-BASELINE INVARIANT + REACHABILITY — via the shared helpers
@@ -94,14 +99,21 @@ describe('baseline-cleanliness (shared helper, capstone ×1000 seeds)', () => {
 
 describe('reachability (shared helper — search over handle/param space)', () => {
   it('vecops.addition — free a, b', () => { assertReachable(sceneAt(0)); });
-  it('vecops.scaling — scalar track (auto-discovered)', () => { assertReachable(sceneAt(1)); });
+  it('vecops.scaling — scalar c searched as an explicit scalar dim', () => {
+    assertReachable(sceneAt(1), { dims: [{ bind: 'c', range: [-2.5, 2.5], steps: 100 }] });
+  });
   it('vecops.span — free b', () => { assertReachable(sceneAt(3)); });
-  it('vecops.convex — query + temperature track', () => { assertReachable(sceneAt(4)); });
+  it('vecops.convex — query (handle) + temperature searched as an explicit scalar dim', () => {
+    assertReachable(sceneAt(4), { dims: [{ bind: 'temp', range: [0.2, 5], steps: 60 }] });
+  });
 
   it('vecops.combination — three targets via analytic witnesses', () => {
-    const at = (c1, c2) => (base) => ({ ...base, c1k: { x: C1_X, y: yForK(c1) }, c2k: { x: C2_X, y: yForK(c2) } });
     assertReachable(sceneAt(2), {
-      witnesses: (base) => [at(2, 1)(base), at(-1, 2)(base), at(2, -1)(base)],
+      witnesses: (base) => [
+        { ...base, c1: 2, c2: 1 },
+        { ...base, c1: -1, c2: 2 },
+        { ...base, c1: 2, c2: -1 },
+      ],
     });
   });
   it('vecops.capstone — every target reachable for every seed (analytic witnesses)', () => {
@@ -110,9 +122,9 @@ describe('reachability (shared helper — search over handle/param space)', () =
       witnesses: (base) => {
         const coord = solve2(base.a, base.b, base.T);   // true (c1,c2) of the star
         return [
-          { ...base, c1k: { x: CAP_C1_X, y: capYForK(base.sTarget) } },                                  // scalar target
-          { ...base, c1k: { x: CAP_C1_X, y: capYForK(1) }, c2k: { x: CAP_C2_X, y: capYForK(1) } },        // plain a+b
-          { ...base, c1k: { x: CAP_C1_X, y: capYForK(coord.c1) }, c2k: { x: CAP_C2_X, y: capYForK(coord.c2) } }, // reach star
+          { ...base, c1: base.sTarget },                                  // scalar target
+          { ...base, c1: 1, c2: 1 },                                      // plain a+b
+          { ...base, c1: coord.c1, c2: coord.c2 },                        // reach star
         ];
       },
     });
@@ -170,8 +182,8 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
   });
   it('vecops.scaling g2 (shrink): collapsing c toward 0 must NOT credit as "shrunk"', () => {
     const s = sceneAt(1);
-    expect(s.goals[2].predicate({ ck: { x: SC_X, y: yForCS(0.05) } })).toBe(false); // c<0.1, near-zero arrow
-    expect(s.goals[2].predicate({ ck: { x: SC_X, y: yForCS(0.3) } })).toBe(true);   // a real half-length shrink
+    expect(s.goals[2].predicate({ c: 0.05 })).toBe(false); // c<0.1, near-zero arrow
+    expect(s.goals[2].predicate({ c: 0.3 })).toBe(true);   // a real half-length shrink
   });
   it('vecops.span (collapse): shrinking b to near-zero must NOT credit the parallel goal', () => {
     const s = sceneAt(3);
@@ -180,8 +192,8 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
   });
   it('vecops.convex g2 (blend): zeroing the query must NOT credit; raising temperature does', () => {
     const s = sceneAt(4);
-    expect(s.goals[2].predicate({ q: { x: 0, y: 0 }, tk: { x: CV_X, y: CV_HI } })).toBe(false);   // zero q flattens for free
-    expect(s.goals[2].predicate({ q: { x: 1.6, y: 1.0 }, tk: { x: CV_X, y: CV_LO } })).toBe(false); // real but cool
-    expect(s.goals[2].predicate({ q: { x: 1.6, y: 1.0 }, tk: { x: CV_X, y: CV_HI } })).toBe(true);  // real + hot
+    expect(s.goals[2].predicate({ q: { x: 0, y: 0 }, temp: 5 })).toBe(false);    // zero q flattens for free
+    expect(s.goals[2].predicate({ q: { x: 1.6, y: 1.0 }, temp: 0.2 })).toBe(false); // real but cool
+    expect(s.goals[2].predicate({ q: { x: 1.6, y: 1.0 }, temp: 5 })).toBe(true);    // real + hot
   });
 });
