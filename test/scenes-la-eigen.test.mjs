@@ -17,7 +17,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { assertBaselineClean, assertReachable } from './helpers/scene-invariants.mjs';
 import { eigSym2, eigenMatrix, isAligned, eigRatio, matApply, scale } from '../lib/curriculum/scenes/vec-math.js';
 
-let makeRng, validateScenes;
+let makeRng, validateScenes, toAtoms, view;
 let scenesForLesson, capstoneFor, validateSceneLessons;
 
 const LESSON = 'la-eigen';
@@ -28,7 +28,7 @@ const EXPECTED_IDS = [
 const QUIZ_TAGS = new Set(['eigen definition', 'diagonal matrices', 'PCA connection']);
 
 beforeAll(async () => {
-  ({ makeRng, validateScenes } = await import('../lib/scene/index.js'));
+  ({ makeRng, validateScenes, toAtoms, view } = await import('../lib/scene/index.js'));
   const res = await import('../lib/curriculum/scenes/index.js');   // registers all scene modules
   ({ scenesForLesson, capstoneFor, validateSceneLessons } = res);
 });
@@ -249,5 +249,32 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
     const tiny = scale(base.tDir1, 0.05);
     expect(cap.goals[0].predicate({ ...base, v: tiny })).toBe(false);
     expect(cap.goals[0].predicate({ ...base, v: base.tDir1 })).toBe(true);
+  });
+});
+
+describe('P2 wave C — inset gauge retrofit (Amendment v1.7 §2), semantics-preserving', () => {
+  it('eigen.pca declares an inset and routes a trace point + reference curve into it', () => {
+    const s = sceneAt(4);
+    expect(s.id).toBe('eigen.pca');
+    expect(s.inset).toEqual({ rect: [0.62, 0.05, 0.33, 0.33], extent: 1.1 });
+    const list = s.entities(view(toAtoms(s.params || {})), 0);
+    const trace = list.find((e) => e.key === 'trace');
+    expect(trace).toBeTruthy();
+    expect(trace.frame).toBe('inset');
+    expect(list.some((e) => e.kind === 'curve' && e.frame === 'inset')).toBe(true);
+    // every main-space entity is untouched (still 'main', the default)
+    expect(list.filter((e) => e.kind === 'segment').every((e) => e.frame === 'main')).toBe(true);
+  });
+  it('no inset entity carries a handle (read-only in v1.6)', () => {
+    const s = sceneAt(4);
+    const list = s.entities(view(toAtoms(s.params || {})), 0);
+    for (const e of list.filter((x) => x.frame === 'inset')) expect(e.handle == null).toBe(true);
+  });
+  it('goals/params/controls/caption are BYTE-IDENTICAL to the pre-inset scene', () => {
+    const s = sceneAt(4);
+    expect(s.goals.length).toBe(3);
+    expect(s.goals.map((g) => g.tag)).toEqual(['PCA connection', 'PCA connection', 'PCA connection']);
+    expect(s.controls.map((c) => c.param)).toEqual(['theta']);
+    expect(s.params).toEqual({ theta: 0 });
   });
 });
