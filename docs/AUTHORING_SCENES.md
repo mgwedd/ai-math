@@ -52,6 +52,7 @@ registerScene({
   params: { a: vec(2.6, 0.6), b: vec(1.4, 2.4) },  // PLAIN object: name -> vec | scalar
   entities: (p, t) => [ ... ],   // PURE: (paramsView, time) -> Entity[]
   goals: [ goal(...), goal(...) ],
+  controls: [ slider('k', { min: 0, max: 1, step: 0.05 }) ],  // optional DOM controls — §3
   caption: 'Drag the arrows...',
   capstone: false,          // exactly one scene per lesson sets this true
 })
@@ -67,6 +68,8 @@ registerScene({
   *current raw value* of param `a`; `t` is scene time in seconds. Re-evaluated
   whenever a param changes (or a motion source ticks). See §4.
 - **`goals`** — see §5.
+- **`controls`** — an optional array of DOM control descriptors (currently just
+  `slider`). Rendered as accessible inputs, not on the canvas. See §3.
 - **`caption`** — see §6.
 
 Register your scene module by importing it from
@@ -133,14 +136,56 @@ constrain closures in `vec-math.js` are the pattern:
   locks `a` to its ray so scaling is isolated from rotation.
 - `circleConstraint(r)` — drag around a circle (angle-only). Scene 2 locks `b`'s
   length so alignment is isolated from magnitude.
-- `trackConstraint(x, lo, hi)` — a vertical "slider made of a point". Scene 6's
-  temperature knob (v1 has no scalar-slider control — see
-  [Getting unblocked](#getting-unblocked)).
+- `trackConstraint(x, lo, hi)` — a vertical "slider made of a point". Predates
+  the real `slider` control (below); for a **scalar** knob prefer
+  `controls: [slider(...)]` over faking one with a draggable point.
 
 > **Diff-friendliness:** define constrain closures and fixed guide geometry
 > **once at module scope**, not inside `entities`. A fresh closure every frame
 > makes the diff layer treat the entity as always-changed (CONTRACT §4). See
 > `onCircle2`, `onRay4`, `A4_LINE_A` in `la-dot.js`.
+
+### Controls: the slider (a scalar knob)
+
+When a param is a **scalar** (not a position you'd drag on the plane) — a
+weight, a regularization strength, a temperature — bind a real slider instead of
+faking one with a `trackConstraint` point. `slider` is a **control descriptor**,
+declared in the scene's `controls:` array (not `entities` — it is a DOM overlay,
+never drawn on the canvas):
+
+```js
+import { slider } from '@/lib/scene';   // or '../lib/scene/index.js'
+
+controls: [
+  slider('k', { min: 0, max: 1, step: 0.05, label: 'weight k', format: v => v.toFixed(2) }),
+  slider('lambda', { min: 0, max: 2 }),   // step/label/format optional; label defaults to the param name
+]
+```
+
+- **First arg is the param name** it writes; `min`/`max` are required, `step`
+  (snap increment), `label` (visible + `aria-label`), and `format` (readout
+  formatter) are optional.
+- It renders as a native `<input type="range">` — **keyboard operable and screen-
+  reader labelled for free**. Positioned inside the scene container under the
+  canvas.
+- **One-way flow is preserved**: a move writes *through* the atom
+  (`params[k].set(...)`), which re-evaluates `entities`. The atom is the **single
+  source of truth** — the slider has no shadow state, so a `newAttempt()` reroll
+  (capstone) or any other write **moves the slider** to match.
+- A slider move **counts as learner input**: it opens the learner-input gate
+  (§5), so goals can credit after it. Only actual moves count — a programmatic
+  atom write does not.
+- The bound param must be **numeric**; `validateScenes()` rejects a slider on a
+  `vec` param or a missing one.
+
+> **Not** the imperative `slider()` in `lib/engine.js` (the legacy lab kit, with
+> positional args and an `onChange` callback). The scene-kit `slider` is
+> declarative and atom-bound — import it from `lib/scene`, not `lib/engine`.
+
+> **Headless tests:** there is no `<input>` to click in the node test env. Inject
+> the null backend and drive the slider through it:
+> `backend.setSliderValue('k', 0.7)` — same path as a real move (clamps, snaps,
+> writes the atom, opens the gate).
 
 ---
 
