@@ -65,6 +65,14 @@ describe('registration + validation', () => {
       }
     }
   });
+  it('EVERY goal (not just the capstone) carries a tag and a non-empty focus', () => {
+    for (const s of scenesForLesson(LESSON)) {
+      s.goals.forEach((g, i) => {
+        expect(g.tag, s.id + ' #' + i + ' tag').toBeTruthy();
+        expect(typeof g.focus === 'string' && g.focus.length > 0, s.id + ' #' + i + ' focus').toBe(true);
+      });
+    }
+  });
 });
 
 describe('baseline-cleanliness (shared helper, capstone ×1000 seeds)', () => {
