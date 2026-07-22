@@ -250,3 +250,28 @@ describe('ANTI-GAMING: degenerate (zero-vector) strategies must NOT credit', () 
     expect(s.goals[1].predicate({ q: baseQ, tk: { x: 5.2, y: yHi } })).toBe(true);
   });
 });
+
+describe('P2 wave C — inset gauge retrofit (Amendment v1.7 §2), semantics-preserving', () => {
+  it('dot.alignment declares an inset and routes a trace point + reference curve into it', () => {
+    const s = scenesForLesson(LESSON).find((x) => x.id === 'dot.alignment');
+    expect(s.inset).toEqual({ rect: [0.62, 0.05, 0.33, 0.33], extent: 1.2 });
+    const list = s.entities(view(toAtoms(s.params || {})), 0);
+    const trace = list.find((e) => e.key === 'trace');
+    expect(trace).toBeTruthy();
+    expect(trace.frame).toBe('inset');
+    expect(list.some((e) => e.kind === 'curve' && e.frame === 'inset')).toBe(true);
+    // every main-space entity is untouched (still 'main', the default)
+    expect(list.filter((e) => e.kind === 'vector').every((e) => e.frame === 'main')).toBe(true);
+  });
+  it('no inset entity carries a handle (read-only in v1.6)', () => {
+    const s = scenesForLesson(LESSON).find((x) => x.id === 'dot.alignment');
+    const list = s.entities(view(toAtoms(s.params || {})), 0);
+    for (const e of list.filter((x) => x.frame === 'inset')) expect(e.handle == null).toBe(true);
+  });
+  it('goals/params/caption are BYTE-IDENTICAL to the pre-inset scene (still 3 goals, same tags)', () => {
+    const s = scenesForLesson(LESSON).find((x) => x.id === 'dot.alignment');
+    expect(s.goals.length).toBe(3);
+    expect(s.goals.map((g) => g.tag)).toEqual(['cosine similarity', 'cosine similarity', 'cosine similarity']);
+    expect(s.caption).toBe('Sweep b around the circle — its length is locked, so only the angle changes. Find where cos θ hits +1, 0, and −1.');
+  });
+});
