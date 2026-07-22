@@ -711,3 +711,225 @@ describe('v1.4 slider DOM overlay lifecycle (real-document path)', () => {
     }
   });
 });
+
+/* ============================ v1.6 INSET SUB-SPACE ============================
+   CONTRACT Amendment v1.6 §1: an optional `inset` sub-space, frame:'main'|'inset'
+   entity routing, second Pixi container (transform + clip mask + chrome), null-
+   backend headless routing seam, read-only validation (no handle on inset), and
+   inline-spec parity. */
+
+describe('v1.6 inset — validation (registerScene / validateScenes)', () => {
+  const mk = (id, over) => Object.assign({
+    id, space: 'plane2', params: { a: vec(1, 1) },
+    entities: (p) => [grid(), vector(p.a, { key: 'v' })],
+  }, over);
+
+  it('accepts a valid inset; rejects out-of-unit-square and malformed rects at registerScene', () => {
+    expect(() => registerScene(mk('in.ok', { inset: { rect: [0.6, 0.05, 0.35, 0.35] } }))).not.toThrow();
+    expect(() => registerScene(mk('in.oob', { inset: { rect: [0.8, 0.8, 0.5, 0.5] } }))).toThrow(/in\.oob/);   // x+w>1, y+h>1
+    expect(() => registerScene(mk('in.badrect', { inset: { rect: [0, 0, 1] } }))).toThrow(/in\.badrect/);       // not 4 numbers
+    expect(() => registerScene(mk('in.negw', { inset: { rect: [0.1, 0.1, 0, 0.2] } }))).toThrow(/in\.negw/);    // w must be >0
+  });
+
+  it('rejects a bad extent, a non-boolean yUp, and an inset on a free space', () => {
+    expect(() => registerScene(mk('in.ext', { inset: { rect: [0, 0, 0.3, 0.3], extent: -1 } }))).toThrow(/in\.ext/);
+    expect(() => registerScene(mk('in.yup', { inset: { rect: [0, 0, 0.3, 0.3], yUp: 'nope' } }))).toThrow(/in\.yup/);
+    expect(() => registerScene({ id: 'in.free', space: 'free', params: {}, entities: () => [], inset: { rect: [0, 0, 0.3, 0.3] } })).toThrow(/in\.free/);
+  });
+
+  it('validateScenes rejects frame:inset without a declaration, a handle on an inset entity, an unknown frame, and an inert inset readout label', () => {
+    registerScene(mk('in.nodecl', { entities: (p) => [vector(p.a, { key: 'v', frame: 'inset' })] }));          // uses inset, none declared
+    registerScene(mk('in.hdl', { inset: { rect: [0, 0, 0.3, 0.3] }, entities: (p) => [vector(p.a, { key: 'v', frame: 'inset', handle: 'a' })] }));  // read-only violation
+    registerScene(mk('in.badframe', { inset: { rect: [0, 0, 0.3, 0.3] }, entities: (p) => [point(p.a, { key: 'p', frame: 'sideways' })] }));
+    // F4: a readout label routed to the inset is silently inert (the readout is a
+    // DOM strip, not the inset sub-space) — reject it loudly, don't ship a no-op.
+    registerScene(mk('in.readout', { inset: { rect: [0, 0, 0.3, 0.3] }, entities: () => [label('cos θ', { key: 'l', at: 'readout', frame: 'inset' })] }));
+    registerScene(mk('in.clean', { inset: { rect: [0, 0, 0.3, 0.3] }, entities: (p) => [point(p.a, { key: 'p', frame: 'inset' }), label('cos θ', { key: 'l', at: vec(0, -1), frame: 'inset' })] }));
+    const problems = validateScenes();
+    expect(problems.some(m => m.includes('in.nodecl') && m.includes('declares no `inset`'))).toBe(true);
+    expect(problems.some(m => m.includes('in.hdl') && m.includes('read-only'))).toBe(true);
+    expect(problems.some(m => m.includes('in.badframe') && m.includes('invalid frame'))).toBe(true);
+    expect(problems.some(m => m.includes('in.readout') && m.includes('inert'))).toBe(true);
+    expect(problems.some(m => m.includes('in.clean'))).toBe(false);   // a proper at:<vec> inset label is fine
+  });
+
+  it('entity constructors materialize frame:`main` by default and carry `inset` when set (stays a pure prop)', () => {
+    expect(vector(vec(1, 0)).frame).toBe('main');
+    expect(point(vec(0, 0), { frame: 'inset' }).frame).toBe('inset');
+    expect(grid().frame).toBe('main');
+  });
+});
+
+describe('v1.6 inset — null backend frame routing (headless seam)', () => {
+  it('records each entity resolved frame; inset entities route to the inset, main to main', async () => {
+    const be = createNullBackend(), f = fakeRaf();
+    const spec = {
+      id: 'inrt.mix', space: 'plane2', params: { a: vec(2, 1), g: 0.5 },
+      inset: { rect: [0.6, 0.05, 0.35, 0.35], extent: 1.2 },
+      entities: (p) => [
+        vector(p.a, { key: 'v' }),                             // main space
+        point(vec(p.g, 0), { key: 'trace', frame: 'inset' }),  // inset gauge (params drive it)
+      ],
+    };
+    const c = await mountScene(spec, null, { backend: be, raf: f.raf, caf: f.caf });
+    f.tick(16);
+    expect(be._inset).toBeTruthy();
+    expect(be._inset.rect).toEqual([0.6, 0.05, 0.35, 0.35]);
+    expect(be._frameOf('v')).toBe('main');
+    expect(be._frameOf('trace')).toBe('inset');
+    c.destroy();
+  });
+
+  it('a frame:inset entity with NO inset declared resolves to main (graceful fallback, mirrors pixi)', () => {
+    const be = createNullBackend();
+    be.apply([{ type: 'add', key: 'x', entity: point(vec(0, 0), { key: 'x', frame: 'inset' }) }]);
+    expect(be._frameOf('x')).toBe('main');
+  });
+
+  it('a frame flip across renders re-records the resolved frame (update op, no diff partitioning)', async () => {
+    const be = createNullBackend(), f = fakeRaf();
+    const spec = {
+      id: 'inrt.flip', space: 'plane2', params: { m: 0 },
+      inset: { rect: [0, 0, 0.3, 0.3] },
+      entities: (p) => [point(vec(0, 0), { key: 'p', frame: p.m > 0.5 ? 'inset' : 'main' })],
+    };
+    const c = await mountScene(spec, null, { backend: be, raf: f.raf, caf: f.caf });
+    f.tick(16); expect(be._frameOf('p')).toBe('main');
+    c.params.m.set(1); f.tick(16); expect(be._frameOf('p')).toBe('inset');
+    c.destroy();
+  });
+
+  it('an inline scene with a bad inset rect fails LOUD at mountScene (parity with registered specs)', async () => {
+    await expect(mountScene({
+      id: 'inline.badinset', space: 'plane2', params: {}, entities: () => [],
+      inset: { rect: [0.8, 0.8, 0.5, 0.5] },
+    }, null, { backend: createNullBackend() })).rejects.toThrow(/inset\.rect/);
+  });
+
+  it('an inline scene with an ENTITY-level frame error fails LOUD at mountScene (validateScenes never runs in prod)', async () => {
+    // These checks previously lived ONLY in validateScenes; the inline path
+    // (engine.js scenes:[...]) bypasses it, so they must run in the mount guard.
+    const held = param(0);   // an atom we hold, to prove NO partial wiring leaked
+
+    // (a) a handle on a frame:'inset' entity — the inset is read-only in v1.6.
+    await expect(mountScene({
+      id: 'inline.insethdl', space: 'plane2', params: { a: vec(1, 0), k: held },
+      inset: { rect: [0, 0, 0.3, 0.3] },
+      entities: (p) => [vector(p.a, { key: 'v', frame: 'inset', handle: 'a' })],
+    }, null, { backend: createNullBackend() })).rejects.toThrow(/read-only/);
+
+    // (b) frame:'inset' with no inset declared — nowhere to route it.
+    await expect(mountScene({
+      id: 'inline.insetnodecl', space: 'plane2', params: { a: vec(1, 0) },
+      entities: (p) => [point(p.a, { key: 'p', frame: 'inset' })],
+    }, null, { backend: createNullBackend() })).rejects.toThrow(/declares no `inset`/);
+
+    // The guard throws BEFORE any driver/atom subscription is armed — no leak.
+    expect(held._subCount()).toBe(0);
+  });
+
+  it('mount-throw teardown WITH an inset present clears the inset (no leaked second space)', async () => {
+    const prevDoc = globalThis.document;
+    const mkNode = (tag) => ({
+      tagName: (tag || 'div').toUpperCase(), className: '', type: '', value: '', min: '', max: '', step: '',
+      textContent: '', valueAsNumber: 0, children: [], _attrs: {},
+      setAttribute(k, v){ this._attrs[k] = v; }, appendChild(c){ this.children.push(c); return c; },
+      remove(){}, addEventListener(){},
+    });
+    globalThis.document = { createElement: (t) => mkNode(t) };
+    try {
+      const be = createNullBackend();
+      // Capture that the inset was ACTUALLY declared during mount (before the
+      // throw) — otherwise a null-after would prove nothing (an inset that was
+      // never set is also null). insetLiveAtMount confirms teardown cleared a
+      // PRESENT inset, not an absent one.
+      let insetLiveAtMount = false;
+      const origSetInset = be.setInset.bind(be);
+      be.setInset = (s, r) => { origSetInset(s, r); insetLiveAtMount = !!be._inset; };
+      const container = mkNode('div');
+      const spec = {
+        id: 'inrt.throw', space: 'plane2', params: { k: 0.5 },
+        inset: { rect: [0, 0, 0.3, 0.3] },
+        controls: [slider('k', { min: 0, max: 1, format: () => { throw new Error('boom'); } })],
+        entities: () => [],
+      };
+      await expect(mountScene(spec, container, { backend: be })).rejects.toThrow('boom');
+      expect(insetLiveAtMount).toBe(true);   // inset WAS present mid-mount, before the throw
+      expect(be._inset).toBe(null);          // ...and backend.destroy() during teardown cleared it
+    } finally {
+      if(prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+    }
+  });
+
+  it('context-loss recovery re-declares the inset on the rebuilt backend', async () => {
+    const f = fakeRaf();
+    let lost = null; const insetCalls = [];
+    const make = () => ({
+      setSpace(){}, setInset(s, rect){ insetCalls.push(rect); }, clearInset(){},
+      mountCanvas(){}, resize(){}, apply(){}, clear(){},
+      onContextLost(fn){ lost = fn; }, unmount(){}, destroy(){},
+    });
+    const spec = {
+      id: 'inrec.factory', space: 'plane2', params: { a: vec(1, 0) },
+      inset: { rect: [0.6, 0.05, 0.3, 0.3] },
+      entities: (p) => [vector(p.a, { key: 'v' })],
+    };
+    const c = await mountScene(spec, null, { backend: make, raf: f.raf, caf: f.caf });
+    expect(insetCalls.length).toBe(1);        // declared at mount
+    await lost();                             // simulate WebGL context loss -> rebuild
+    expect(insetCalls.length).toBe(2);        // re-declared on the fresh backend
+    c.destroy();
+  });
+});
+
+describe('v1.6 inset — Pixi second container (transform, clip mask, chrome, routing, teardown)', () => {
+  it('setInset builds a masked, chromed container; resize positions + sizes it to the rect px box', async () => {
+    const { createPixiBackend, destroyPixiSingleton } = await import('../lib/scene/renderer/pixi.js');
+    destroyPixiSingleton();
+    const be = await createPixiBackend();
+    be.setSpace(createSpace('plane2', { extent: 6 }));
+    be.resize(400, 400, 1);
+    const insetSpace = createSpace('plane2', { extent: 1.2 });
+    be.setInset(insetSpace, [0.6, 0.05, 0.35, 0.35]);
+    expect(be._inset).toBeTruthy();
+    expect(be._inset.container.mask).toBe(be._inset.mask);            // clip mask wired
+    expect(be._inset.container.x).toBe(240);                          // 0.6 * 400
+    expect(be._inset.container.y).toBe(20);                           // 0.05 * 400
+    expect(be._inset.container.children.includes(be._inset.chrome)).toBe(true);   // chrome child present
+    expect(insetSpace.scale).toBeGreaterThan(0);                     // sub-space sized to the rect box
+    be.clearInset();
+    expect(be._inset).toBe(null);                                    // clean teardown
+    be.destroy(); destroyPixiSingleton();
+  });
+
+  it('routes entities to the inset container by frame and re-parents on a frame change', async () => {
+    const { createPixiBackend, destroyPixiSingleton } = await import('../lib/scene/renderer/pixi.js');
+    destroyPixiSingleton();
+    const be = await createPixiBackend();
+    be.setSpace(createSpace('plane2', { extent: 6 }));
+    be.resize(400, 400, 1);
+    be.setInset(createSpace('plane2', { extent: 1.2 }), [0.6, 0.05, 0.35, 0.35]);
+    const chromeOnly = be._inset.container.children.length;           // just the chrome so far
+    be.apply([{ type: 'add', key: 'g', entity: point(vec(0, 0), { key: 'g', frame: 'inset' }) }]);
+    expect(be._frameOf('g')).toBe('inset');
+    expect(be._inset.container.children.length).toBe(chromeOnly + 1); // node landed in the inset container
+    be.apply([{ type: 'update', key: 'g', entity: point(vec(0, 0), { key: 'g', frame: 'main' }), changed: ['frame'] }]);
+    expect(be._frameOf('g')).toBe('main');
+    expect(be._inset.container.children.length).toBe(chromeOnly);     // re-parented out to the main layer
+    be.apply([{ type: 'remove', key: 'g' }]);
+    expect(be._frameOf('g')).toBe(undefined);
+    be.destroy(); destroyPixiSingleton();
+  });
+});
+
+describe('v1.6 plane2 yUp option (inset gauges may want screen-style y-down)', () => {
+  it('default is y-up (unchanged transform); yUp:false flips the screen-y sign and round-trips', () => {
+    const up = createSpace('plane2', { extent: 5 }).resize(200, 200, 1);
+    const down = createSpace('plane2', { extent: 5, yUp: false }).resize(200, 200, 1);
+    expect(up.toScreen({ x: 0, y: 1 }).py).toBeLessThan(100);        // world +y is ABOVE center
+    expect(down.toScreen({ x: 0, y: 1 }).py).toBeGreaterThan(100);   // world +y is BELOW center
+    expect(up.toScreen({ x: 3, y: 2 })).toEqual({ px: 100 + 3 * up.scale, py: 100 - 2 * up.scale });  // byte-identical to prior
+    const w = down.toWorld(down.toScreen({ x: 2, y: -3 }));
+    expect(w.x).toBeCloseTo(2, 9); expect(w.y).toBeCloseTo(-3, 9);   // round-trip under y-down
+  });
+});

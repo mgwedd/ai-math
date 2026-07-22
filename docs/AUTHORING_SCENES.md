@@ -53,6 +53,7 @@ registerScene({
   entities: (p, t) => [ ... ],   // PURE: (paramsView, time) -> Entity[]
   goals: [ goal(...), goal(...) ],
   controls: [ slider('k', { min: 0, max: 1, step: 0.05 }) ],  // optional DOM controls — §3
+  inset: { rect: [0.62, 0.05, 0.33, 0.33] },  // optional second sub-space (gauge/trace) — §3
   caption: 'Drag the arrows...',
   capstone: false,          // exactly one scene per lesson sets this true
 })
@@ -70,6 +71,8 @@ registerScene({
 - **`goals`** — see §5.
 - **`controls`** — an optional array of DOM control descriptors (currently just
   `slider`). Rendered as accessible inputs, not on the canvas. See §3.
+- **`inset`** — an optional second (read-only) sub-space for a trace/gauge in a
+  corner of the canvas. Route entities into it with `frame: 'inset'`. See §3.
 - **`caption`** — see §6.
 
 Register your scene module by importing it from
@@ -186,6 +189,47 @@ controls: [
 > the null backend and drive the slider through it:
 > `backend.setSliderValue('k', 0.7)` — same path as a real move (clamps, snaps,
 > writes the atom, opens the gate).
+
+### Inset: a second sub-space for a trace / gauge (v1.6)
+
+Sometimes you want a **small second plot** in a corner of the canvas — a gauge
+that traces a scalar as the learner drags the main figure (cos θ vs angle, a
+loss curve, a running dot product). Declare an **`inset`** on the scene and route
+entities into it with `frame: 'inset'`:
+
+```js
+registerScene({
+  id: 'dot.alignment', space: 'plane2',
+  params: { b: vec(1.4, 2.4) },
+  inset: { rect: [0.62, 0.05, 0.33, 0.33], extent: 1.2 },   // top-right corner box
+  entities: (p) => [
+    grid(), vector(p.b, { label: 'b', handle: 'b' }),        // main space (draggable)
+    // the gauge: a dot tracing cos θ (x) vs |b| (y), in INSET world coords
+    point(vec(cos(theta(p.b)), norm(p.b)), { key: 'trace', frame: 'inset', color: 'good' }),
+    label('cos θ', { at: vec(0, -1), frame: 'inset', color: 'muted' }),  // at is INSET coords
+  ],
+  goals: [ /* ... */ ],
+});
+```
+
+- **`inset.rect` is `[x, y, w, h]` in fraction-of-canvas coords** (0–1, **top-left
+  origin**) — it must lie fully inside the unit square (`x+w ≤ 1`, `y+h ≤ 1`).
+  `extent` (default `1.2`) is the inset's own world half-extent; `yUp` (default
+  `true`) can be set `false` for a screen-style y-down gauge. **One inset per
+  scene.**
+- **`frame: 'inset'`** on any entity routes it into the inset sub-space; the
+  default is `frame: 'main'`. An inset entity's positions (and a `label`'s `at`)
+  are in the **inset's** world coords, not the main space's. The kit draws the
+  inset as a masked, subtly-bordered box — you just place entities in it. A
+  `label(..., { at: 'readout' })` **cannot** go in the inset (the readout is the
+  DOM a11y strip, not a sub-space) — `validateScenes()` rejects it; give an inset
+  label an explicit `at: vec(...)`.
+- **The inset is READ-ONLY** in v1.6: params **drive** it (that's the whole
+  point — a trace visual), but you **cannot** put a `handle` on a `frame:'inset'`
+  entity. `validateScenes()` rejects that, and rejects `frame:'inset'` in a scene
+  with no `inset` declared. Pointer dragging stays in the main space.
+- **Headless tests:** the null backend records each entity's resolved frame —
+  assert routing with `backend._frameOf('trace') === 'inset'`.
 
 ---
 
