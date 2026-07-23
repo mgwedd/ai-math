@@ -102,7 +102,7 @@ describe('the shipped curriculum is coherent', () => {
   });
 
   it('tags every lesson with a world the engine knows', () => {
-    const KNOWN = new Set(['pre', 'la', 'calc', 'prob', 'ml']);
+    const KNOWN = new Set(['pre', 'la', 'calc', 'prob', 'ml', 'rl']);
     expect(LESSONS.filter(l => !KNOWN.has(l.world)).map(l => l.id)).toEqual([]);
   });
 
