@@ -345,9 +345,11 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
     expect(s.goals[0].predicate({ k: 1 })).toBe(false);
     expect(s.goals[0].predicate({ k: 2 })).toBe(true);
   });
-  it('eigen.power g2: k=3 (past the window where FAST has converged but SLOW has too) must NOT credit — the comparison, not just "k is smallish", is what is gated', () => {
+  it('eigen.power g2: the k∈{2..6} window is exact — k=6 still credits, k=7 does not (review-pinned boundary)', () => {
     const s = sceneAt(5);
     expect(s.goals[1].predicate({ k: 2 })).toBe(true);    // FAST converged, SLOW still adrift
+    expect(s.goals[1].predicate({ k: 6 })).toBe(true);    // SLOW cos ≈ 0.9853, still under the 0.99 gate
+    expect(s.goals[1].predicate({ k: 7 })).toBe(false);   // SLOW cos ≈ 0.9901, just crossed the 0.99 gate
     expect(s.goals[1].predicate({ k: 8 })).toBe(false);   // by k=8 SLOW has also converged past the 0.99 gate
   });
   it('eigen.tracedet g3: a repeated (or near-repeated) eigenvalue must NOT credit an axis-angle target, however precisely phi is dialed in', () => {
