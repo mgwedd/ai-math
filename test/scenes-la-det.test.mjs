@@ -18,7 +18,7 @@ let scenesForLesson, capstoneFor, validateSceneLessons;
 const LESSON = 'la-det';
 const EXPECTED_IDS = [
   'det.formula', 'det.collapse', 'det.sign',
-  'det.scale', 'det.area', 'det.capstone',
+  'det.scale', 'det.area', 'det.product', 'det.shear', 'det.capstone',
 ];
 
 beforeAll(async () => {
@@ -93,6 +93,32 @@ describe('reachability (shared helper — search over handle/param space)', () =
     assertReachable(sceneAt(3), { dims: [{ bind: 't', range: [-4, 4], steps: 200 }] });
   });
 
+  it('det.product — reachable via analytic witnesses (compensating chain, sign flip, one-factor collapse)', () => {
+    assertReachable(sceneAt(5), {
+      dims: [
+        { bind: 'aCol1', values: [{ x: 1, y: 0 }] },
+        { bind: 'aCol2', values: [{ x: 0, y: 1 }] },
+        { bind: 'bCol1', values: [{ x: 1, y: 0 }] },
+        { bind: 'bCol2', values: [{ x: 0, y: 1 }] },
+      ],
+      witnesses: () => [
+        // goal 1: det(A)=5/3, det(B)=0.6, product=1 — every column's magnitude stays clear of MIN_MAG (0.5)
+        { aCol1: { x: 5 / 3, y: 0 }, aCol2: { x: 0, y: 1 }, bCol1: { x: 1, y: 0 }, bCol2: { x: 0.9, y: 0.6 } },
+        { aCol1: { x: 1, y: 0 }, aCol2: { x: 0, y: 1 }, bCol1: { x: -1, y: 0 }, bCol2: { x: 0, y: 1 } },    // goal 2: det(A)=1, det(B)=-1
+        { aCol1: { x: 1, y: 0 }, aCol2: { x: 2, y: 0 }, bCol1: { x: 2, y: 0 }, bCol2: { x: 0, y: 2 } },     // goal 3: det(A)=0 (collapsed), det(B)=4 (healthy)
+      ],
+    });
+  });
+
+  it('det.shear — s and k searched as explicit scalar dims', () => {
+    assertReachable(sceneAt(6), {
+      dims: [
+        { bind: 's', range: [0, 3], steps: 60 },
+        { bind: 'k', range: [-2.5, 2.5], steps: 60 },
+      ],
+    });
+  });
+
   it('det.capstone — every target reachable for every seed (analytic witnesses)', () => {
     assertReachable(capstoneFor(LESSON), {
       seeds: 50,
@@ -163,6 +189,34 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
     // legitimate: two real, parallel columns
     expect(s.goals[0].predicate({ col1: { x: 1, y: 0 }, col2: { x: 2, y: 0 } })).toBe(true);
     expect(s.goals[1].predicate({ col1: { x: 1, y: 0 }, col2: { x: -2, y: 0 } })).toBe(true);
+  });
+  it('det.product g1 (compensating chain): near-zero A columns paired with a blown-up B must NOT credit', () => {
+    const s = sceneAt(5);
+    // aCol shrunk to ~0 (det(A)≈0.0001, "far from 1") + bCol blown up to compensate (det(B)=10000) → product≈1
+    const shrunk = { aCol1: { x: 0.01, y: 0 }, aCol2: { x: 0, y: 0.01 }, bCol1: { x: 100, y: 0 }, bCol2: { x: 0, y: 100 } };
+    expect(s.goals[0].predicate(shrunk)).toBe(false);   // aCol1/aCol2 below MIN_MAG — real-column floor blocks it
+    const legit = { aCol1: { x: 5 / 3, y: 0 }, aCol2: { x: 0, y: 1 }, bCol1: { x: 1, y: 0 }, bCol2: { x: 0.9, y: 0.6 } };
+    expect(s.goals[0].predicate(legit)).toBe(true);
+  });
+  it('det.product g2 (negative): a near-zero A column must NOT credit a fake sign flip', () => {
+    const s = sceneAt(5);
+    const shrunk = { aCol1: { x: 0.01, y: 0 }, aCol2: { x: 0, y: 0.01 }, bCol1: { x: -3, y: 0 }, bCol2: { x: 0, y: 3 } };
+    expect(s.goals[1].predicate(shrunk)).toBe(false);   // aCol1/aCol2 collapsed — real-column floor blocks it
+    const legit = { aCol1: { x: 1, y: 0 }, aCol2: { x: 0, y: 1 }, bCol1: { x: -1, y: 0 }, bCol2: { x: 0, y: 1 } };
+    expect(s.goals[1].predicate(legit)).toBe(true);
+  });
+  it('det.product g3 (chain collapse): a near-zero "collapsed" factor must be a REAL parallel pair, not a shrunk one', () => {
+    const s = sceneAt(5);
+    const fakeCollapse = { aCol1: { x: 0.01, y: 0 }, aCol2: { x: 0, y: 0.01 }, bCol1: { x: 2, y: 0 }, bCol2: { x: 0, y: 2 } };
+    expect(s.goals[2].predicate(fakeCollapse)).toBe(false);   // aCol columns shrunk past MIN_MAG, not a genuine collapse
+    const legit = { aCol1: { x: 1, y: 0 }, aCol2: { x: 2, y: 0 }, bCol1: { x: 2, y: 0 }, bCol2: { x: 0, y: 2 } };
+    expect(s.goals[2].predicate(legit)).toBe(true);
+  });
+  it('det.shear: k alone can never fake either magnitude goal — only s moves det', () => {
+    const s = sceneAt(6);
+    expect(s.goals[0].predicate({ s: 1, k: 0 })).toBe(false);       // det=2 but k=0, no shear happened
+    expect(s.goals[0].predicate({ s: 1, k: 1.8 })).toBe(true);      // real shear, det still 2
+    expect(s.goals[1].predicate({ s: 1, k: 5 })).toBe(false);       // huge k, but det is still 2s=2, not 4
   });
   it('det.capstone g3 (collapse): a near-zero column must NOT credit', () => {
     const cap = capstoneFor(LESSON);
