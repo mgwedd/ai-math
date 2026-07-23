@@ -20,7 +20,7 @@ let scenesForLesson, capstoneFor, validateSceneLessons;
 const LESSON = 'la-matmul';
 const EXPECTED_IDS = [
   'matmul.compose', 'matmul.order', 'matmul.entries',
-  'matmul.slider', 'matmul.collapse', 'matmul.capstone',
+  'matmul.slider', 'matmul.collapse', 'matmul.commute', 'matmul.capstone',
 ];
 
 // pure helpers (mirror ./vec-math) for witnesses + anti-gaming states
@@ -112,6 +112,25 @@ describe('reachability (shared helper — search over handle/param space)', () =
         { bind: 'l2Col2', values: [{ x: 0, y: 1 }] },
       ],
       witnesses: () => [{ l1Col1: { x: 1, y: 0 }, l1Col2: { x: 0, y: 1 }, l2Col1: { x: 0, y: 2 }, l2Col2: { x: -1, y: 0 } }],
+    });
+  });
+
+  it('matmul.commute — reachable via analytic witnesses (a non-commuting shear/rotate pair; two distinct rotations)', () => {
+    assertReachable(sceneAt(5), {
+      dims: [
+        { bind: 'aCol1', values: [{ x: 1, y: 0 }] },
+        { bind: 'aCol2', values: [{ x: 0, y: 1 }] },
+        { bind: 'bCol1', values: [{ x: 1, y: 0 }] },
+        { bind: 'bCol2', values: [{ x: 0, y: 1 }] },
+      ],
+      witnesses: () => {
+        const phiA = (60 * Math.PI) / 180, phiB = (150 * Math.PI) / 180;
+        return [
+          { aCol1: { x: 1, y: 0 }, aCol2: { x: 1, y: 1 }, bCol1: { x: 0, y: 1 }, bCol2: { x: -1, y: 0 } },   // goal 1: gap > 1.5
+          { aCol1: rot({ x: 1, y: 0 }, phiA), aCol2: rot({ x: 0, y: 1 }, phiA),                              // goal 2: two distinct
+            bCol1: rot({ x: 1, y: 0 }, phiB), bCol2: rot({ x: 0, y: 1 }, phiB) },                            //   rotations commute
+        ];
+      },
     });
   });
 
@@ -240,6 +259,22 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
     const legit = { l1Col1: { x: 1, y: 0 }, l1Col2: { x: 0, y: 1 }, l2Col1: { x: 0, y: 2 }, l2Col2: { x: -1, y: 0 } };
     expect(s.goals[0].predicate(legit)).toBe(true);
     expect(s.goals[1].predicate(legit)).toBe(true);
+  });
+  it('matmul.commute g2: A == B trivially "commutes" but must NOT credit; two distinct rotations do', () => {
+    const s = sceneAt(5);
+    const I = { aCol1: { x: 1, y: 0 }, aCol2: { x: 0, y: 1 }, bCol1: { x: 1, y: 0 }, bCol2: { x: 0, y: 1 } };
+    expect(s.goals[1].predicate(I)).toBe(false);   // identical (identity==identity) — not the insight
+    const phiA = (60 * Math.PI) / 180, phiB = (150 * Math.PI) / 180;
+    const legit = {
+      aCol1: rot({ x: 1, y: 0 }, phiA), aCol2: rot({ x: 0, y: 1 }, phiA),
+      bCol1: rot({ x: 1, y: 0 }, phiB), bCol2: rot({ x: 0, y: 1 }, phiB),
+    };
+    expect(s.goals[1].predicate(legit)).toBe(true);
+  });
+  it('matmul.commute g2: two near-zero (collapsed) matrices drag the gap to 0 for free — must NOT credit', () => {
+    const s = sceneAt(5);
+    const shrunk = { aCol1: { x: 0.01, y: 0 }, aCol2: { x: 0, y: 0.01 }, bCol1: { x: 0.01, y: 0.01 }, bCol2: { x: -0.01, y: 0.01 } };
+    expect(s.goals[1].predicate(shrunk)).toBe(false);
   });
   it('matmul.capstone g3: placing A and B far from target must NOT fake the composed-column check', () => {
     const cap = capstoneFor(LESSON);
