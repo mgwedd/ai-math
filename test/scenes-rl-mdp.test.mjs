@@ -81,6 +81,17 @@ describe('registration + validation', () => {
     const tags = capstoneFor(LESSON).goals.map((g) => g.tag);
     expect(new Set(tags)).toEqual(CAPSTONE_TAGS);
   });
+  it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
+    // Cheap, honest proxy (mirrors test/scenes-c-limits.test.mjs): every
+    // goal text must carry a WHY connective or a domain term, not stop at
+    // the bare mechanical instruction. Every goal here was authored with a
+    // "... to see how <concept>" clause. Captions are NOT required to
+    // repeat it (goal-level only, same as the c-limits precedent).
+    const WHY_RE = /(to see how|to see|proving|confirming|the same|exactly (how|the)|why|bellman|contraction|fixed point|discount|horizon|argmax|propagat)/i;
+    for (const s of scenesForLesson(LESSON)) {
+      for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
+    }
+  });
   it('rl.discount and rl.iteration/rl.capstone declare their sliders with in-range initial values', () => {
     const discount = sceneAt(2), iteration = sceneAt(3), cap = capstoneFor(LESSON);
     expect(discount.controls.map((c) => c.param)).toEqual(['gamma']);
@@ -125,8 +136,19 @@ describe('reachability (shared helper)', () => {
   it('rl.policy — probe handle auto-discovered', () => {
     assertReachable(sceneAt(4));
   });
-  it('rl.capstone — gamma+k searched, every target reachable for both seeds', () => {
-    assertReachable(capstoneFor(LESSON), { dims: [GAMMA_DIM, K_DIM], seeds: 2 });
+  it('rl.capstone — gamma+k searched, every target reachable for BOTH side draws', () => {
+    // Don't rely on seed luck: seeds 1 and 2 both happen to draw side:-1
+    // (side:1 first appears at seed 7), so a plain `seeds:2` never actually
+    // reachability-tests the side:1 goals (review-confirmed defect). Find
+    // one seed per side dynamically instead of hardcoding a magic seed.
+    const cap = capstoneFor(LESSON);
+    const seedForSide = (want) => {
+      for (let seed = 1; seed <= 50; seed++) if (cap.randomize(makeRng(seed)).side === want) return seed;
+      throw new Error('no seed found drawing side ' + want + ' within 50 tries');
+    };
+    const seeds = CAP_SIDES.map(seedForSide);
+    expect(new Set(seeds.map((seed) => cap.randomize(makeRng(seed)).side))).toEqual(new Set(CAP_SIDES));
+    assertReachable(cap, { dims: [GAMMA_DIM, K_DIM], seeds });
   });
 });
 
@@ -161,7 +183,7 @@ describe('CAPSTONE BASELINE-SAFETY — exhaustive enumeration of the finite para
   // ZERO sweeps, so V(start) = 0 for every gamma (the sweep loop never
   // runs) and residual(*, 0) = +Infinity by definition (k<1 guard) —
   // every capstone goal is false at k=0 regardless of gamma or side. The
-  // only randomized dimension is `side` (2 values); enumerate both.
+  // only randomized dimension is `side` (2 possible values); enumerate both.
   it('all three goals are false at the reset params, for both possible side draws', () => {
     const cap = capstoneFor(LESSON);
     for (const side of CAP_SIDES) {
@@ -180,6 +202,19 @@ describe('CAPSTONE BASELINE-SAFETY — exhaustive enumeration of the finite para
         expect(cap.goals[1].predicate(s)).toBe(false);
       }
     }
+  });
+});
+
+describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
+  it('rl.bellman goal 1: parking the probe ON the terminal itself must NOT credit (V[GOAL]=1 is fixed at init, never swept)', () => {
+    const bellman = sceneAt(1);
+    const onGoal = { probe: cellCenter(GOAL.r, GOAL.c) };
+    const onPit = { probe: cellCenter(PIT.r, PIT.c) };
+    expect(bellman.goals[0].predicate(onGoal)).toBe(false);
+    expect(bellman.goals[0].predicate(onPit)).toBe(false);
+    // legitimate witness: a real goal-adjacent, non-terminal neighbor still credits
+    const adjacent = { probe: cellCenter(GOAL.r, GOAL.c - 1) };   // (0,2), non-terminal
+    expect(bellman.goals[0].predicate(adjacent)).toBe(true);
   });
 });
 
