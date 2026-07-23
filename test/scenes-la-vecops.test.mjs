@@ -69,6 +69,21 @@ describe('registration + validation', () => {
       });
     }
   });
+  it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
+    // Honest proxy (mirrors test/scenes-c-limits.test.mjs): every goal text
+    // must carry an explicit WHY connective ("to see how"/"because") or a
+    // genuinely ML-specific PHRASE from this lesson's vocabulary. Bare
+    // single words (weight/basis/span/attention) were rejected in review —
+    // they double as this lesson's own mechanic vocabulary ("push its
+    // weight above 0.85", "clearly span the plane") and false-pass bare
+    // mechanic text. Verified: this regex fails every pre-rewrite goal at
+    // origin/main except vecops.difference g1 (already ties to a gradient
+    // step, wave E — the one legitimate skip).
+    const WHY_RE = /(to see how|because|gradient step|principal component|softmax|attention)/i;
+    for (const s of scenesForLesson(LESSON)) {
+      for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
+    }
+  });
   it('scalar controls are real v1.4 sliders bound to scalar params (retrofitted from the track fallback)', () => {
     const expectSlider = (scene, params) => {
       expect(Array.isArray(scene.controls)).toBe(true);

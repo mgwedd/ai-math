@@ -84,6 +84,19 @@ describe('registration + validation', () => {
       });
     }
   });
+  it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
+    // Honest proxy (mirrors test/scenes-c-limits.test.mjs). "the same" and
+    // bare "composition"/"commut" were rejected in review — they false-pass
+    // plain mechanic text ("the same way", "applying A first, then B").
+    // "exception" is the one distinctive word both matmul.commute goals
+    // share (wave E's "rule, not the exception" framing, deliberately
+    // untouched). Verified: this regex fails every pre-rewrite goal at
+    // origin/main except those two commute goals.
+    const WHY_RE = /(to see how|because|exception)/i;
+    for (const s of scenesForLesson(LESSON)) {
+      for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
+    }
+  });
 });
 
 describe('baseline-cleanliness (shared helper, capstone ×1000 seeds)', () => {
