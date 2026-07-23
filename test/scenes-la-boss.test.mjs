@@ -15,6 +15,7 @@
    not just sampled seeds. */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { assertBaselineClean, assertReachable, handleDims } from './helpers/scene-invariants.mjs';
+import { CAP_SIDES, CAP_MARGIN, CAP_MARGIN2, CAP_DET, CAP_DET2 } from '../lib/curriculum/scenes/la-boss.js';
 
 let makeRng, validateScenes;
 let scenesForLesson, capstoneFor, validateSceneLessons;
@@ -149,16 +150,14 @@ describe('capstone: weak-area tag migration + the official reroll seam', () => {
   });
   it('capstone draws stay within the finite sets, reset controls are the identity, for every seed', () => {
     const cap = capstoneFor(LESSON);
-    const SIDES = [1, -1], MARGINS = [0.2, 0.25, 0.3], MARGINS2 = [0.4, 0.5, 0.6];
-    const DETS = [0.3, 0.4, 0.5], DETS2 = [0.5, 0.6, 0.7];
     for (let seed = 1; seed <= 200; seed++) {
       const p = cap.randomize(makeRng(seed));
       expect(p.a).toBe(1); expect(p.b).toBe(0); expect(p.c).toBe(0); expect(p.d).toBe(1);
-      expect(SIDES).toContain(p.side);
-      expect(MARGINS).toContain(p.margin);
-      expect(MARGINS2).toContain(p.margin2);
-      expect(DETS).toContain(p.detMin);
-      expect(DETS2).toContain(p.detMin2);
+      expect(CAP_SIDES).toContain(p.side);
+      expect(CAP_MARGIN).toContain(p.margin);
+      expect(CAP_MARGIN2).toContain(p.margin2);
+      expect(CAP_DET).toContain(p.detMin);
+      expect(CAP_DET2).toContain(p.detMin2);
     }
   });
 });
@@ -169,14 +168,11 @@ describe('CAPSTONE BASELINE-SAFETY — exhaustive enumeration of the finite para
   // [0.65,1.35], CLUSTER_B in [1.45,2.15]) — so `sepDir` (and therefore every
   // capstone goal, all of which require it) is false for every one of the
   // 2×3×3×3×3 = 162 possible draws, with no dependency on margin/det values.
-  const SIDES = [1, -1], MARGINS = [0.2, 0.25, 0.3], MARGINS2 = [0.4, 0.5, 0.6];
-  const DETS = [0.3, 0.4, 0.5], DETS2 = [0.5, 0.6, 0.7];
-
   it('goal 1 (separation) is false at baseline for all 162 possible draws', () => {
     const cap = capstoneFor(LESSON);
     let n = 0;
-    for (const side of SIDES) for (const margin of MARGINS) for (const margin2 of MARGINS2)
-      for (const detMin of DETS) for (const detMin2 of DETS2) {
+    for (const side of CAP_SIDES) for (const margin of CAP_MARGIN) for (const margin2 of CAP_MARGIN2)
+      for (const detMin of CAP_DET) for (const detMin2 of CAP_DET2) {
         n++;
         const s = { a: 1, b: 0, c: 0, d: 1, side, margin, margin2, detMin, detMin2 };
         expect(cap.goals[0].predicate(s)).toBe(false);
