@@ -86,10 +86,16 @@ describe('registration + validation', () => {
     }
   });
   it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
-    // Honest proxy (mirrors test/scenes-c-limits.test.mjs), tuned to this
-    // lesson's vocabulary: the eigen "always/never" structural claims and
-    // the PCA/principal-component tie-in.
-    const WHY_RE = /(to see how|always|neither|principal component|PCA|perpendicular)/i;
+    // Honest proxy (mirrors test/scenes-c-limits.test.mjs). Bare "always"/
+    // "neither"/"perpendicular" were rejected in review — the untouched,
+    // already-factual goal texts contain those words verbatim ("ALWAYS an
+    // eigenvector", "NEITHER eigenvalue moves", "always perpendicular"),
+    // so they false-passed bare mechanic text everywhere else too. Only
+    // "principal component" / "PCA" survive as distinctive markers, shared
+    // by eigen.pca g1/g2 and eigen.capstone g3 (already explicit, the three
+    // legitimate skips). Verified: this regex fails every pre-rewrite goal
+    // at origin/main except those three.
+    const WHY_RE = /(to see how|principal component|\bPCA\b)/i;
     for (const s of scenesForLesson(LESSON)) {
       for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
     }

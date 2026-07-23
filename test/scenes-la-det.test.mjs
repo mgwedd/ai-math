@@ -74,10 +74,15 @@ describe('registration + validation', () => {
     }
   });
   it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
-    // Honest proxy (mirrors test/scenes-c-limits.test.mjs), tuned to this
-    // lesson's vocabulary: invertibility, orientation, and the
-    // collapse/preserve language det goals are built around.
-    const WHY_RE = /(to see how|because|preserve|collaps|rescue|invertib|orientation)/i;
+    // Honest proxy (mirrors test/scenes-c-limits.test.mjs). "collaps"/
+    // "orientation"/"preserve" were rejected in review — det's own goal
+    // instructions say "Collapse space..." and "...oriented backwards"
+    // verbatim, so those words false-pass bare mechanic text. "rescue" is
+    // the one distinctive word det.shear g3 uses (already-explanatory,
+    // deliberately untouched); det.shear g1 keeps its own "because" clause.
+    // Verified: this regex fails every pre-rewrite goal at origin/main
+    // except those two shear goals.
+    const WHY_RE = /(to see how|because|rescue)/i;
     for (const s of scenesForLesson(LESSON)) {
       for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
     }
