@@ -73,11 +73,12 @@ describe('registration + validation', () => {
       });
     }
   });
-  it('R-CONTENT invariant (g): every goal text and caption states a conceptual payoff, not just the mechanical action', () => {
+  it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
+    // Captions are NOT required to repeat it — see the matching note in
+    // test/scenes-c-limits.test.mjs (content review, 2026-07-22).
     const WHY_RE = /(to see how|proving|confirming|the same|exactly (how|the)|why|gradient|training|loss|autodiff|optimizer|\bmodel\b|network|weight)/i;
     for (const s of scenesForLesson(LESSON)) {
       for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
-      expect(WHY_RE.test(s.caption), s.id + ' caption missing a WHY clause').toBe(true);
     }
   });
   it('every scalar-control scene declares the expected sliders', () => {
@@ -120,8 +121,8 @@ describe('reachability (shared helper — search over slider/param space)', () =
     assertReachable(capstoneFor(LESSON), {
       seeds: 50,
       witnesses: (base) => [
-        { ...base, a: 0.5, h: 0.001 },                          // g1: any a, tiny h
-        { ...base, a: base.c + CAP_OFFSET, h: 0.001 },          // g2: exact target offset, tiny h
+        { ...base, a: 0.5, h: 0.01 },                          // g1: any a, tiny h
+        { ...base, a: base.c + CAP_OFFSET, h: 0.01 },          // g2: exact target offset, tiny h
         { ...base, a: base.c },                                  // g3: exactly at critical point
       ],
     });
@@ -206,7 +207,7 @@ describe('ANTI-GAMING (h/w-shrink honesty — no scale-invariant ratio in this l
   it('deriv.secant g1 does NOT credit at a large h even though a happens to already be near the target slope', () => {
     const s = sceneAt(0);
     expect(s.goals[0].predicate({ a: 2, h: 2 })).toBe(false);    // secant slope far from f'(2)=2 at h=2
-    expect(s.goals[0].predicate({ a: 2, h: 0.001 })).toBe(true);
+    expect(s.goals[0].predicate({ a: 2, h: 0.01 })).toBe(true);
   });
   it('deriv.zoom g1 does NOT credit at a large window even if the gap happens to be small there', () => {
     const s = sceneAt(1);
@@ -218,8 +219,8 @@ describe('ANTI-GAMING (h/w-shrink honesty — no scale-invariant ratio in this l
     const base = cap.randomize(makeRng(1));
     expect(cap.goals[0].predicate({ ...base, a: 0.5, h: 1.5 })).toBe(false);
     expect(cap.goals[1].predicate({ ...base, a: base.c + CAP_OFFSET, h: 1.5 })).toBe(false);
-    expect(cap.goals[0].predicate({ ...base, a: 0.5, h: 0.001 })).toBe(true);
-    expect(cap.goals[1].predicate({ ...base, a: base.c + CAP_OFFSET, h: 0.001 })).toBe(true);
+    expect(cap.goals[0].predicate({ ...base, a: 0.5, h: 0.01 })).toBe(true);
+    expect(cap.goals[1].predicate({ ...base, a: base.c + CAP_OFFSET, h: 0.01 })).toBe(true);
   });
 });
 

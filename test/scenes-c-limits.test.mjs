@@ -83,11 +83,14 @@ describe('registration + validation', () => {
     // AI-foundations tie or an explicit "why" connective), not stop at the
     // bare mechanical instruction. Every goal in this file was authored
     // with a "— to see how / — proving / — the same X" clause; assert one
-    // of those connectives (or an ml-adjacent term) is present.
+    // of those connectives (or an ml-adjacent term) is present. Captions are
+    // NOT required to repeat it — content review (2026-07-22) flagged
+    // caption/goal near-verbatim duplication on limits.hole/limits.factor;
+    // the payoff now lives in the goal text only, captions stay mechanic-
+    // focused, per that fix.
     const WHY_RE = /(to see how|proving|confirming|the same|exactly (how|the)|why|gradient|training|loss|autodiff|optimizer|\bmodel\b|network|weight)/i;
     for (const s of scenesForLesson(LESSON)) {
       for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
-      expect(WHY_RE.test(s.caption), s.id + ' caption missing a WHY clause').toBe(true);
     }
   });
   it('the diagonal-style scenes (jump/asymptote/classify) declare the expected sliders', () => {
