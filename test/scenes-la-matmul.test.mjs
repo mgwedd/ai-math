@@ -41,7 +41,7 @@ beforeAll(async () => {
 const sceneAt = (i) => scenesForLesson(LESSON)[i];
 
 describe('registration + validation', () => {
-  it('registers the six la-matmul scenes in arc order', () => {
+  it('registers the seven la-matmul scenes in arc order', () => {
     expect(scenesForLesson(LESSON).map((s) => s.id)).toEqual(EXPECTED_IDS);
   });
   it('passes the kit per-scene validateScenes() with zero problems', () => {
@@ -259,6 +259,16 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
     const legit = { l1Col1: { x: 1, y: 0 }, l1Col2: { x: 0, y: 1 }, l2Col1: { x: 0, y: 2 }, l2Col2: { x: -1, y: 0 } };
     expect(s.goals[0].predicate(legit)).toBe(true);
     expect(s.goals[1].predicate(legit)).toBe(true);
+  });
+  it('matmul.commute g2: leaving EITHER matrix at the identity trivially commutes but must NOT credit', () => {
+    const s = sceneAt(5);
+    const I1v = { x: 1, y: 0 }, I2v = { x: 0, y: 1 };
+    // A left at identity, B dragged to something real+distinct — I commutes with everything for free
+    const aAtIdentity = { aCol1: I1v, aCol2: I2v, bCol1: { x: 2, y: 0.3 }, bCol2: { x: -0.5, y: 1.2 } };
+    expect(s.goals[1].predicate(aAtIdentity)).toBe(false);
+    // B left at identity instead
+    const bAtIdentity = { aCol1: { x: 2, y: 0.3 }, aCol2: { x: -0.5, y: 1.2 }, bCol1: I1v, bCol2: I2v };
+    expect(s.goals[1].predicate(bAtIdentity)).toBe(false);
   });
   it('matmul.commute g2: A == B trivially "commutes" but must NOT credit; two distinct rotations do', () => {
     const s = sceneAt(5);
