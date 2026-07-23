@@ -19,7 +19,7 @@ let scenesForLesson, capstoneFor, validateSceneLessons;
 const LESSON = 'la-vecops';
 const EXPECTED_IDS = [
   'vecops.addition', 'vecops.scaling', 'vecops.combination',
-  'vecops.span', 'vecops.convex', 'vecops.capstone',
+  'vecops.span', 'vecops.convex', 'vecops.difference', 'vecops.capstone',
 ];
 
 // pure vec helpers (mirror ./vec-math) for witnesses + anti-gaming states
@@ -106,6 +106,8 @@ describe('reachability (shared helper — search over handle/param space)', () =
   it('vecops.convex — query (handle) + temperature searched as an explicit scalar dim', () => {
     assertReachable(sceneAt(4), { dims: [{ bind: 'temp', range: [0.2, 5], steps: 60 }] });
   });
+
+  it('vecops.difference — free points a, b (auto-discovered handles)', () => { assertReachable(sceneAt(5)); });
 
   it('vecops.combination — three targets via analytic witnesses', () => {
     assertReachable(sceneAt(2), {

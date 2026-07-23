@@ -270,6 +270,6 @@ describe('P2 wave C — inset gauge retrofit (Amendment v1.7 §2), semantics-pre
     const s = scenesForLesson(LESSON).find((x) => x.id === 'dot.alignment');
     expect(s.goals.length).toBe(3);
     expect(s.goals.map((g) => g.tag)).toEqual(['cosine similarity', 'cosine similarity', 'cosine similarity']);
-    expect(s.caption).toBe('Sweep b around the circle — its length is locked, so only the angle changes. Find where cos θ hits +1, 0, and −1.');
+    expect(s.caption).toBe('Sweep b around the circle — its length is locked, so only the angle changes, to see how cosine similarity depends purely on direction. This is why embeddings are compared by angle, not raw length.');
   });
 });
