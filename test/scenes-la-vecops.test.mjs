@@ -69,6 +69,16 @@ describe('registration + validation', () => {
       });
     }
   });
+  it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
+    // Honest proxy (mirrors test/scenes-c-limits.test.mjs): every goal text
+    // must carry an explicit WHY connective or an AI-foundations-adjacent
+    // term from this lesson's vocabulary (linear combinations, basis,
+    // span, attention/softmax weights, gradient-style residuals).
+    const WHY_RE = /(to see how|proving|confirming|the same|exactly (how|the)|why|gradient|training|loss|weight|basis|span|attention)/i;
+    for (const s of scenesForLesson(LESSON)) {
+      for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
+    }
+  });
   it('scalar controls are real v1.4 sliders bound to scalar params (retrofitted from the track fallback)', () => {
     const expectSlider = (scene, params) => {
       expect(Array.isArray(scene.controls)).toBe(true);

@@ -84,6 +84,15 @@ describe('registration + validation', () => {
       });
     }
   });
+  it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
+    // Honest proxy (mirrors test/scenes-c-limits.test.mjs), tuned to this
+    // lesson's vocabulary: composition order, non-commutativity ("rule, not
+    // the exception"), and the collapse-to-one-matrix payoff.
+    const WHY_RE = /(to see how|prov(e|ing)|confirming|the same|exactly (how|the)|why|composition|commut|exception)/i;
+    for (const s of scenesForLesson(LESSON)) {
+      for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
+    }
+  });
 });
 
 describe('baseline-cleanliness (shared helper, capstone ×1000 seeds)', () => {

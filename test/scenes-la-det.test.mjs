@@ -73,6 +73,15 @@ describe('registration + validation', () => {
       });
     }
   });
+  it('R-CONTENT invariant (g): every goal text states a conceptual payoff, not just the mechanical action', () => {
+    // Honest proxy (mirrors test/scenes-c-limits.test.mjs), tuned to this
+    // lesson's vocabulary: invertibility, orientation, and the
+    // collapse/preserve language det goals are built around.
+    const WHY_RE = /(to see how|because|preserve|collaps|rescue|invertib|orientation)/i;
+    for (const s of scenesForLesson(LESSON)) {
+      for (const g of s.goals) expect(WHY_RE.test(g.text), s.id + ' goal missing a WHY clause: ' + g.text).toBe(true);
+    }
+  });
 });
 
 describe('baseline-cleanliness (shared helper, capstone ×1000 seeds)', () => {
