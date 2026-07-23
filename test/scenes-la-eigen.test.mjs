@@ -15,15 +15,15 @@
    (lambda-pair, phi) grid, not just sampled seeds. */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { assertBaselineClean, assertReachable } from './helpers/scene-invariants.mjs';
-import { eigSym2, eigenMatrix, isAligned, eigRatio, matApply, scale } from '../lib/curriculum/scenes/vec-math.js';
+import { eigSym2, eigenMatrix, isAligned, eigRatio, matApply, scale, norm, dot, add } from '../lib/curriculum/scenes/vec-math.js';
 
 let makeRng, validateScenes, toAtoms, view;
 let scenesForLesson, capstoneFor, validateSceneLessons;
 
 const LESSON = 'la-eigen';
 const EXPECTED_IDS = [
-  'eigen.anatomy', 'eigen.diagonal', 'eigen.hunt',
-  'eigen.orthogonal', 'eigen.pca', 'eigen.capstone',
+  'eigen.anatomy', 'eigen.diagonal', 'eigen.hunt', 'eigen.orthogonal', 'eigen.pca',
+  'eigen.power', 'eigen.tracedet', 'eigen.capstone',
 ];
 const QUIZ_TAGS = new Set(['eigen definition', 'diagonal matrices', 'PCA connection']);
 
@@ -61,6 +61,23 @@ describe('registration + validation', () => {
     expect(sc.controls[0].kind).toBe('slider');
     expect(sc.controls[0].param).toBe('theta');
     expect(typeof sc.params.theta).toBe('number');
+  });
+  it('the power scene declares a single integer-stepped k slider (0..12)', () => {
+    const sc = sceneAt(5);
+    expect(sc.id).toBe('eigen.power');
+    expect(sc.controls.map((c) => c.param)).toEqual(['k']);
+    expect(sc.controls[0].kind).toBe('slider');
+    expect(sc.controls[0].min).toBe(0);
+    expect(sc.controls[0].max).toBe(12);
+    expect(sc.controls[0].step).toBe(1);
+    expect(sc.params.k).toBe(0);
+  });
+  it('the tracedet scene declares trace/det/phi sliders', () => {
+    const sc = sceneAt(6);
+    expect(sc.id).toBe('eigen.tracedet');
+    expect(sc.controls.map((c) => c.param)).toEqual(['trace', 'det', 'phi']);
+    for (const c of sc.controls) expect(c.kind).toBe('slider');
+    expect(sc.params).toEqual({ trace: 3, det: 1, phi: 0.3 });
   });
   it('every scene is plane2, caption ≤ 3 sentences, 2–5 goals with text/predicate/xp', () => {
     for (const s of scenesForLesson(LESSON)) {
@@ -146,6 +163,20 @@ describe('reachability (shared helper — search over handle/param space)', () =
     assertReachable(sceneAt(4), { dims: [{ bind: 'theta', range: [-Math.PI / 2, Math.PI / 2], steps: 300 }] });
   });
 
+  it('eigen.power — k is an integer slider (no handle): searched as an explicit dim over its full 0..12 range', () => {
+    assertReachable(sceneAt(5), { dims: [{ bind: 'k', range: [0, 12], steps: 12 }] });
+  });
+
+  it('eigen.tracedet — trace/det/phi are sliders, not handle-bound: searched via analytic witnesses', () => {
+    assertReachable(sceneAt(6), {
+      witnesses: () => [
+        { trace: 5, det: 4, phi: 0.3 },    // goal 1: λ1=4, λ2=1 (exact root of x²-5x+4)
+        { trace: 0, det: 2, phi: 0.3 },    // goal 2: 0 < 4*2-0.1 — well past the tr²<4·det boundary
+        { trace: 3, det: 1, phi: 2.0 },    // goal 3: distinct eigenvalues (disc=5), axis at the target angle
+      ],
+    });
+  });
+
   it('eigen.capstone — every target reachable for every seed (analytic witnesses)', () => {
     assertReachable(capstoneFor(LESSON), {
       seeds: 100,
@@ -228,6 +259,46 @@ describe('CAPSTONE BASELINE-SAFETY — exhaustive enumeration of the finite para
   });
 });
 
+describe('P2 wave J — POWER ITERATION honesty conditions (Amendment v1.14)', () => {
+  // The mined convergence claim requires TWO things to be true, and here
+  // they are properties of fixed module-scope constants (not user input),
+  // so they are provable ONCE rather than per-attempt: |lambda1| > |lambda2|
+  // for both matrices, and the fixed start v0 is genuinely non-orthogonal to
+  // the shared dominant direction [1,1].
+  const M1_EIG = eigSym2(2, 1, 2);          // fast: lambda 3, 1
+  const SLOW_EIG = eigSym2(1, 0.1, 1);      // slow: lambda 1.1, 0.9
+  const DOM = norm({ x: 1, y: 1 });
+  const V0 = { x: Math.cos(Math.PI / 12), y: Math.sin(Math.PI / 12) };
+  function powerVec(eig, v0, k) {
+    const c1 = dot(v0, eig.dir1), c2 = dot(v0, eig.dir2);
+    return norm(add(scale(eig.dir1, Math.pow(eig.lambda1, k) * c1), scale(eig.dir2, Math.pow(eig.lambda2, k) * c2)));
+  }
+  it('both matrices satisfy |lambda1| > |lambda2| (the convergence precondition)', () => {
+    expect(Math.abs(M1_EIG.lambda1)).toBeGreaterThan(Math.abs(M1_EIG.lambda2));
+    expect(Math.abs(SLOW_EIG.lambda1)).toBeGreaterThan(Math.abs(SLOW_EIG.lambda2));
+  });
+  it('the fixed start v0 is genuinely non-orthogonal to the dominant direction (cos ≈ 0.866, not ≈ 0)', () => {
+    expect(Math.abs(dot(V0, DOM))).toBeGreaterThan(0.5);   // well clear of the orthogonal (never-converges) case
+  });
+  it('both eigen-decompositions share the SAME dominant direction [1,1], so one dashed target line is honest for both', () => {
+    expect(Math.abs(dot(M1_EIG.dir1, DOM))).toBeCloseTo(1, 6);
+    expect(Math.abs(dot(SLOW_EIG.dir1, DOM))).toBeCloseTo(1, 6);
+  });
+  it('v_k stays EXACTLY unit length for every k (normalize is baked into the closed form) — no vanishing-vector exploit is even possible', () => {
+    for (let k = 0; k <= 12; k++) {
+      expect(Math.hypot(powerVec(M1_EIG, V0, k).x, powerVec(M1_EIG, V0, k).y)).toBeCloseTo(1, 9);
+      expect(Math.hypot(powerVec(SLOW_EIG, V0, k).x, powerVec(SLOW_EIG, V0, k).y)).toBeCloseTo(1, 9);
+    }
+  });
+  it('the eigenvalue-gap speed payoff is real: FAST crosses 0.995 alignment by k=2; SLOW does not cross it until k=9', () => {
+    const cosAt = (eig, k) => { const v = powerVec(eig, V0, k); return Math.abs(dot(v, DOM)); };
+    expect(cosAt(M1_EIG, 1)).toBeLessThan(0.995);     // not yet at k=1
+    expect(cosAt(M1_EIG, 2)).toBeGreaterThanOrEqual(0.995);
+    expect(cosAt(SLOW_EIG, 8)).toBeLessThan(0.995);   // not yet at k=8
+    expect(cosAt(SLOW_EIG, 9)).toBeGreaterThanOrEqual(0.995);
+  });
+});
+
 describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
   it('eigen.anatomy g1/g2: a near-zero v exactly on the eigen-direction must NOT credit (magnitude floor)', () => {
     const s = sceneAt(0);
@@ -264,6 +335,38 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
     const tiny = scale(base.tDir1, 0.05);
     expect(cap.goals[0].predicate({ ...base, v: tiny })).toBe(false);
     expect(cap.goals[0].predicate({ ...base, v: base.tDir1 })).toBe(true);
+  });
+  it('eigen.power: k=0 (the untouched baseline) must NOT credit ANY of the three goals', () => {
+    const s = sceneAt(5);
+    for (const g of s.goals) expect(g.predicate({ k: 0 })).toBe(false);
+  });
+  it('eigen.power g1: k=1 (one application short) must NOT credit — genuine iteration is required, not "any nonzero k"', () => {
+    const s = sceneAt(5);
+    expect(s.goals[0].predicate({ k: 1 })).toBe(false);
+    expect(s.goals[0].predicate({ k: 2 })).toBe(true);
+  });
+  it('eigen.power g2: the k∈{2..6} window is exact — k=6 still credits, k=7 does not (review-pinned boundary)', () => {
+    const s = sceneAt(5);
+    expect(s.goals[1].predicate({ k: 2 })).toBe(true);    // FAST converged, SLOW still adrift
+    expect(s.goals[1].predicate({ k: 6 })).toBe(true);    // SLOW cos ≈ 0.9853, still under the 0.99 gate
+    expect(s.goals[1].predicate({ k: 7 })).toBe(false);   // SLOW cos ≈ 0.9901, just crossed the 0.99 gate
+    expect(s.goals[1].predicate({ k: 8 })).toBe(false);   // by k=8 SLOW has also converged past the 0.99 gate
+  });
+  it('eigen.tracedet g3: a repeated (or near-repeated) eigenvalue must NOT credit an axis-angle target, however precisely phi is dialed in', () => {
+    const s = sceneAt(6);
+    // trace=2, det=1 -> lambda1=lambda2=1 exactly (disc=0): EVERY direction is
+    // technically an eigenvector here, so "the" eigen-axis angle is meaningless —
+    // must NOT credit even with phi landing exactly on the target.
+    expect(s.goals[2].predicate({ trace: 2, det: 1, phi: 2.0 })).toBe(false);
+    // legitimate: genuinely distinct eigenvalues (disc=5) at the same target angle
+    expect(s.goals[2].predicate({ trace: 3, det: 1, phi: 2.0 })).toBe(true);
+  });
+  it('eigen.tracedet g1/g2: complex-eigenvalue territory (tr²<4·det) must NOT accidentally satisfy the target-eigenvalue goal', () => {
+    const s = sceneAt(6);
+    // trace=0, det=6 -> disc=-24 < 0: eigFromTraceDet returns null, so g1 must
+    // fail closed (no crash, no false credit) rather than throw or coerce.
+    expect(() => s.goals[0].predicate({ trace: 0, det: 6, phi: 0.3 })).not.toThrow();
+    expect(s.goals[0].predicate({ trace: 0, det: 6, phi: 0.3 })).toBe(false);
   });
 });
 
