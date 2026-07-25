@@ -267,6 +267,21 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
     const scene = sceneAt(0);
     expect(scene.goals[1].predicate({ probe: cellCenter(START.r, START.c), alpha: 0.95 })).toBe(true);
   });
+  it('ql.tdupdate goal 2: "barely moves Q even at full alpha" is a real computed fact, not a decorative threshold — |ΔQ| = alpha*|STEP_REWARD| exactly at alpha=1', () => {
+    // Independent re-derivation of the fresh-table TD update for a genuine
+    // non-terminal transition (START --N--> (2,0), not terminal): delta =
+    // R(s') + gamma*0 - 0 = STEP_REWARD (maxNext=0, table is fresh), so
+    // |Q after one step| = alpha*|STEP_REWARD| = 0.02 exactly at alpha=1 —
+    // this IS the "barely moves Q" claim goal 2's focus text makes.
+    // bestAction(START) is N (ties with E on manhattan-distance reduction,
+    // first-in-ACTIONS-order wins) — ACTIONS[0] here, matching the scene's
+    // own local bestAction() helper without re-importing an unexported fn.
+    const ns = succ(START.r, START.c, ACTIONS[0]);
+    expect(ACTIONS[0].name).toBe('N');
+    expect(isTerminal(ns.r, ns.c)).toBe(false);
+    const delta = rewardOf(ns.r, ns.c) + CANONICAL_GAMMA * 0 - 0;
+    expect(Math.abs(1 * delta)).toBeCloseTo(0.02, 9);
+  });
   it('ql.stepsize goal 1: exploit-blocked — n > 3 with a tiny alpha must NOT credit even though (1-alpha)^n eventually crosses 0.5 for large n', () => {
     const scene = sceneAt(1);
     expect(scene.goals[0].predicate({ alpha: 0.05, n: 20 })).toBe(false);   // n>3 disqualifies regardless of the resulting Q
@@ -313,6 +328,23 @@ describe('ANTI-GAMING: degenerate strategies must NOT credit', () => {
   it('ql.compare: matchCount cannot be gamed by probe alone at episodes=0 — verified against the true 7/12 tie fact', () => {
     const scene = sceneAt(5);
     expect(scene.goals[1].predicate({ probe: { x: 0, y: 0 }, episodes: 0 })).toBe(false);
+  });
+  it('NON-REGRESSION: ql.compare\'s matchCount narrative over ep 0..300 — first hits 12/12 at ep 13, never drops below 11 after that, and stays 12/12 from ep 15 on', () => {
+    // Pins the exact facts the scene's own header comment and the wave K log
+    // claim (independently confirmed by both review passes) so future
+    // qLearn/grid drift breaks THIS test instead of silently rotting the
+    // scene's story.
+    let firstFull = null, minAfterFirstFull = Infinity;
+    for (let ep = 0; ep <= 300; ep++) {
+      const m = matchCount(qLearn(1, 0.5, 0.25, ep));
+      if (m === freeNonTerminal.length && firstFull === null) firstFull = ep;
+      if (firstFull !== null) minAfterFirstFull = Math.min(minAfterFirstFull, m);
+    }
+    expect(firstFull).toBe(13);
+    expect(minAfterFirstFull).toBeGreaterThanOrEqual(11);
+    for (let ep = 15; ep <= 300; ep++) {
+      expect(matchCount(qLearn(1, 0.5, 0.25, ep)), 'ep=' + ep).toBe(freeNonTerminal.length);
+    }
   });
 });
 
