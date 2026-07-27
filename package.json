@@ -16,18 +16,18 @@
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",
-    "@supabase/supabase-js": "^2.110.2",
+    "@supabase/supabase-js": "^2.110.8",
     "katex": "^0.18.1",
     "next": "^15.3.3",
     "pg": "^8.22.0",
     "pixi.js": "^8.19.0",
     "prismjs": "^1.30.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.112.3",
-    "eslint": "^10.7.0",
+    "@anthropic-ai/sdk": "^0.115.0",
+    "eslint": "^10.8.0",
     "vitest": "^4.1.10"
   }
 }
