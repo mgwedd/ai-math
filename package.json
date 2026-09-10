@@ -28,6 +28,6 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.112.3",
     "eslint": "^10.7.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
